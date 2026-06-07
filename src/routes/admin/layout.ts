@@ -136,6 +136,7 @@ export function layout(title: string, body: string, breadcrumbs?: { label: strin
     <nav>
       <div class="section">Overview</div>
       <a href="/admin">Dashboard</a>
+      <a href="/admin/analytics">Analytics</a>
       <div class="section">Users</div>
       <a href="/admin/users">Users</a>
       <div class="section">Data</div>

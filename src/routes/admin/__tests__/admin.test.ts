@@ -530,3 +530,66 @@ describe('Admin dashboard — HTML safety', () => {
     expect(res.body).toContain('&lt;img')
   })
 })
+
+describe('Admin dashboard — analytics page', () => {
+  it('requires authentication', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({ method: 'GET', url: '/admin/analytics' })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('renders with valid auth', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { Authorization: VALID_AUTH },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toMatch(/text\/html/)
+    expect(res.body).toContain('Product Analytics')
+  })
+
+  it('shows funnel stages', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { Authorization: VALID_AUTH },
+    })
+    expect(res.body).toContain('Sign-up')
+    expect(res.body).toContain('Bank connected')
+    expect(res.body).toContain('First question')
+  })
+
+  it('shows system health section', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { Authorization: VALID_AUTH },
+    })
+    expect(res.body).toContain('sync success rate')
+    expect(res.body).toContain('AI response success rate')
+  })
+
+  it('shows week-2 retention section', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { Authorization: VALID_AUTH },
+    })
+    expect(res.body).toContain('retention')
+  })
+
+  it('shows analytics link in sidebar', async () => {
+    const app = await buildTestApp(makePrisma())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin',
+      headers: { Authorization: VALID_AUTH },
+    })
+    expect(res.body).toContain('/admin/analytics')
+  })
+})

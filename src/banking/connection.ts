@@ -6,6 +6,7 @@ import { TrueLayerProvider } from './providers/truelayer.js'
 import { runFullSync } from './sync.js'
 import type { SyncResult } from './sync.js'
 import type { ProviderConsent, OpenBankingProvider } from './types.js'
+import { trackEvent } from '../services/analytics/events.js'
 
 export interface MockConnectionResult {
   connection: BankConnection
@@ -113,6 +114,11 @@ export async function createMockConnection(
     data: { onboardingStatus: 'active' },
   })
 
+  trackEvent(prisma, 'bank_connected', userId, {
+    provider: 'mock',
+    transactionsImported: syncResult.transactionsImported,
+  }).catch(() => undefined)
+
   return { connection, syncResult }
 }
 
@@ -144,6 +150,11 @@ export async function createTrueLayerConnection(
     where: { id: userId },
     data: { onboardingStatus: 'active' },
   })
+
+  trackEvent(prisma, 'bank_connected', userId, {
+    provider: provider.providerName,
+    transactionsImported: syncResult.transactionsImported,
+  }).catch(() => undefined)
 
   return { connection, syncResult }
 }

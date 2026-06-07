@@ -2,6 +2,7 @@ import type { PrismaClient, Account } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import type { OpenBankingProvider, ProviderConsent, ProviderTransaction } from './types.js'
 import { transactionDedupHash } from '../lib/crypto.js'
+import { trackEvent } from '../services/analytics/events.js'
 
 const SYNC_WINDOW_DAYS = 90
 
@@ -163,15 +164,31 @@ export async function runFullSync(
     errors.push(...result.errors)
   }
 
+  const success = errors.length === 0
+
   // Update connection sync metadata
   await prisma.bankConnection.update({
     where: { id: connectionId },
     data: {
       lastSyncAt: new Date(),
-      lastSyncStatus: errors.length === 0 ? 'success' : 'partial',
+      lastSyncStatus: success ? 'success' : 'partial',
       lastSyncError: errors.length > 0 ? errors.slice(0, 3).join('; ') : null,
     },
   })
+
+  // Track analytics event (fire-and-forget)
+  trackEvent(
+    prisma,
+    success ? 'transaction_sync' : 'sync_error',
+    userId,
+    {
+      accountsSynced: accounts.length,
+      transactionsImported,
+      transactionsSkipped,
+      errorCount: errors.length,
+      ...(errors.length > 0 ? { firstError: errors[0] } : {}),
+    },
+  ).catch(() => undefined)
 
   return {
     accountsSynced: accounts.length,

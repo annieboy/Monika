@@ -11,6 +11,7 @@ import {
 } from '../analytics/formatter.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
+import { trackEvent } from '../analytics/events.js'
 import { config } from '../../config.js'
 
 // ── Payment guard ──────────────────────────────────────────────────────────
@@ -148,7 +149,12 @@ export async function routeIntent(
   }
 
   if (anthropicApiKey) {
-    return polishWithLlm(intent, structuredText, message, anthropicApiKey)
+    const polished = await polishWithLlm(intent, structuredText, message, anthropicApiKey)
+    // polishWithLlm returns structuredText unchanged on LLM failure — detect and track
+    if (polished === structuredText) {
+      trackEvent(prisma, 'ai_error', userId, { intent, reason: 'llm_fallback' }).catch(() => undefined)
+    }
+    return polished
   }
 
   return structuredText

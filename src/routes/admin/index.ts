@@ -11,6 +11,7 @@ import { dashboardPage } from './pages/dashboard.js'
 import { usersListPage, userDetailPage } from './pages/users.js'
 import { transactionsListPage, transactionDetailPage } from './pages/transactions.js'
 import { auditLogPage } from './pages/audit.js'
+import { analyticsPage } from './pages/analytics.js'
 
 const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── Auth hook — runs before every /admin route ─────────────────────────────
@@ -79,6 +80,12 @@ const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       reply.server.prisma,
       request.query as Record<string, string>,
     )
+    return reply.type('text/html').send(html)
+  })
+
+  // ── Product analytics ──────────────────────────────────────────────────────
+  app.get('/analytics', async (_req, reply) => {
+    const html = await analyticsPage(reply.server.prisma)
     return reply.type('text/html').send(html)
   })
 }
