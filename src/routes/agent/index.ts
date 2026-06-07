@@ -1,63 +1,102 @@
 /**
- * AI Agent Routes — PLACEHOLDER
+ * POST /agent/chat
  *
- * The agent service processes natural language queries against the user's
- * financial data. Compatible with both Anthropic (Claude) and OpenAI APIs
- * via a common tool-calling interface.
+ * HTTP interface for the message processor. Takes a userId + message,
+ * runs the same classify→route→store pipeline as the WhatsApp webhook,
+ * and returns the assistant response.
  *
- * Implementation status: STUB — route exists, returns correct shape.
- *
- * See IMPLEMENTATION_PLAN.md § Task 7.1 for the full spec.
+ * In production this endpoint would sit behind authentication middleware.
+ * For the MVP it accepts any userId so internal tools and the e2e script
+ * can call it directly.
  */
+import { randomUUID } from 'crypto'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import { classifyIntent } from '../../services/agent/classifier.js'
+import { routeIntent } from '../../services/agent/router.js'
+import { config } from '../../config.js'
 
 interface ChatBody {
+  userId: string
   message: string
   sessionId?: string
 }
 
 const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
-  /**
-   * POST /agent/chat
-   *
-   * Production: authenticates the user, loads conversation history, calls
-   * the Claude/OpenAI agent with tool definitions, executes tool calls
-   * against the database, returns the agent's response.
-   *
-   * Stub: echoes the message back with a placeholder response.
-   */
-  app.post<{ Body: ChatBody }>('/chat', {
-    schema: {
-      body: {
-        type: 'object',
-        required: ['message'],
-        properties: {
-          message: { type: 'string', minLength: 1, maxLength: 2000 },
-          sessionId: { type: 'string', format: 'uuid' },
+  app.post<{ Body: ChatBody }>(
+    '/chat',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['userId', 'message'],
+          properties: {
+            userId: { type: 'string', format: 'uuid' },
+            message: { type: 'string', minLength: 1, maxLength: 2000 },
+            sessionId: { type: 'string', format: 'uuid' },
+          },
         },
       },
     },
-  }, async (request, reply) => {
-    // TODO (Task 7.1): Authenticate user from session/token
-    // TODO (Task 7.1): Load conversation history from database
-    // TODO (Task 7.1): Call AnthropicClient.createMessage with tool definitions
-    // TODO (Task 7.2): Execute tool calls (spending queries, subscriptions, etc.)
-    // TODO (Task 7.4): Save exchange to conversations table
+    async (request, reply) => {
+      const { userId, message, sessionId = randomUUID() } = request.body
+      const prisma = request.server.prisma
 
-    const { message, sessionId } = request.body
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      })
+      if (!user) {
+        return reply.status(404).send({ error: 'User not found' })
+      }
 
-    request.log.info(
-      { messageLength: message.length, sessionId },
-      '[STUB] /agent/chat — AI agent not yet implemented',
-    )
+      const classification = await classifyIntent(message, config.ANTHROPIC_API_KEY)
+      const response = await routeIntent(
+        classification.intent,
+        message,
+        userId,
+        prisma,
+        config.ANTHROPIC_API_KEY,
+      )
 
-    return reply.status(200).send({
-      stub: true,
-      message: 'AI agent not yet implemented',
-      echo: message,
-      nextTask: 'Task 7.1 — Anthropic client and base agent',
-    })
-  })
+      const [userMsg, assistantMsg] = await Promise.all([
+        prisma.conversation.create({
+          data: { userId, sessionId, role: 'user', content: message },
+          select: { id: true },
+        }),
+        prisma.conversation.create({
+          data: {
+            userId,
+            sessionId,
+            role: 'assistant',
+            content: response,
+            modelUsed: classification.method === 'llm' ? 'claude-haiku-4-5-20251001' : 'rules',
+            toolCalls: {
+              intent: classification.intent,
+              confidence: classification.confidence,
+              method: classification.method,
+            },
+          },
+          select: { id: true },
+        }),
+      ])
+
+      request.log.info(
+        { userId, intent: classification.intent, method: classification.method },
+        'Agent chat processed',
+      )
+
+      return reply.status(200).send({
+        userId,
+        sessionId,
+        intent: classification.intent,
+        confidence: classification.confidence,
+        method: classification.method,
+        response,
+        conversationId: userMsg.id,
+        responseConversationId: assistantMsg.id,
+      })
+    },
+  )
 }
 
 export default agentRoutes

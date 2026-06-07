@@ -24,7 +24,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "e2e": "tsx scripts/e2e-mvp.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
