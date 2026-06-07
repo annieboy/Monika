@@ -1,18 +1,26 @@
 import { randomUUID } from 'crypto'
 import type { PrismaClient } from '@prisma/client'
 import { hashPhoneNumber } from '../../lib/crypto.js'
+import { classifyIntent } from '../agent/classifier.js'
+import { routeIntent } from '../agent/router.js'
+import { config } from '../../config.js'
 
 export interface ProcessedMessage {
   userId: string
   conversationId: string
+  responseConversationId: string
   isNewUser: boolean
+  intent: string
+  response: string
 }
 
 /**
  * Processes a verified inbound WhatsApp text message:
- * 1. Upserts the User record by phone hash (phone never stored in plaintext)
- * 2. Skips duplicate messages (idempotent on waMessageId)
- * 3. Creates a Conversation record for the inbound message
+ * 1. Deduplicates by waMessageId (Meta may redeliver)
+ * 2. Upserts the User by phone hash (raw phone never stored)
+ * 3. Stores the inbound message as a 'user' Conversation row
+ * 4. Classifies the message intent (rules → LLM fallback)
+ * 5. Stores the assistant reply as an 'assistant' Conversation row
  */
 export async function processInboundMessage(
   prisma: PrismaClient,
@@ -38,18 +46,19 @@ export async function processInboundMessage(
       whatsappWabaId: wabaId,
     },
     update: {
-      // keep wabaId current in case the user links a different WABA
       whatsappWabaId: wabaId,
     },
     select: { id: true, createdAt: true, updatedAt: true },
   })
 
   const isNewUser = user.createdAt.getTime() === user.updatedAt.getTime()
+  const sessionId = randomUUID()
 
-  const conversation = await prisma.conversation.create({
+  // Store inbound message
+  const userConversation = await prisma.conversation.create({
     data: {
       userId: user.id,
-      sessionId: randomUUID(),
+      sessionId,
       role: 'user',
       content: text,
       waMessageId,
@@ -57,9 +66,33 @@ export async function processInboundMessage(
     select: { id: true },
   })
 
+  // Classify and route
+  const classification = await classifyIntent(text, config.ANTHROPIC_API_KEY)
+  const response = routeIntent(classification.intent, text)
+
+  // Store assistant reply in the same session, with intent in toolCalls metadata
+  const assistantConversation = await prisma.conversation.create({
+    data: {
+      userId: user.id,
+      sessionId,
+      role: 'assistant',
+      content: response,
+      modelUsed: classification.method === 'llm' ? 'claude-haiku-4-5-20251001' : 'rules',
+      toolCalls: {
+        intent: classification.intent,
+        confidence: classification.confidence,
+        method: classification.method,
+      },
+    },
+    select: { id: true },
+  })
+
   return {
     userId: user.id,
-    conversationId: conversation.id,
+    conversationId: userConversation.id,
+    responseConversationId: assistantConversation.id,
     isNewUser,
+    intent: classification.intent,
+    response,
   }
 }

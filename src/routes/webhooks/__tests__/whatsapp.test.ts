@@ -143,7 +143,8 @@ describe('POST /webhooks/whatsapp', () => {
 
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toEqual({ status: 'ok' })
-    expect(prisma.conversation.create).toHaveBeenCalledOnce()
+    // Two creates: one for the inbound 'user' message, one for the 'assistant' reply
+    expect(prisma.conversation.create).toHaveBeenCalledTimes(2)
     expect(prisma.user.upsert).toHaveBeenCalledOnce()
   })
 
