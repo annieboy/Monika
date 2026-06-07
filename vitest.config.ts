@@ -1,0 +1,23 @@
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    // Load test environment variables before any test file runs
+    setupFiles: ['./src/test/setup.ts'],
+    // Each test file gets its own context — no shared state between files
+    isolate: true,
+    // Show each test name in output (useful in CI)
+    reporter: 'verbose',
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/test/**', 'src/index.ts', '**/*.d.ts'],
+      reporter: ['text', 'html'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 75,
+      },
+    },
+  },
+})
