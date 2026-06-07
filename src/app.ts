@@ -21,6 +21,7 @@ import healthRoutes from './routes/health.js'
 import whatsappRoutes from './routes/webhooks/whatsapp.js'
 import bankingRoutes from './routes/banking/index.js'
 import agentRoutes from './routes/agent/index.js'
+import adminRoutes from './routes/admin/index.js'
 
 export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   const app = Fastify({
@@ -64,6 +65,7 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   await app.register(whatsappRoutes, { prefix: '/webhooks' }) // /webhooks/whatsapp
   await app.register(bankingRoutes, { prefix: '/banking' })   // /banking/connect, /banking/callback
   await app.register(agentRoutes, { prefix: '/agent' })       // /agent/chat
+  await app.register(adminRoutes, { prefix: '/admin' })       // /admin — internal dashboard
 
   // ── 404 handler ────────────────────────────────────────────────────────────
   app.setNotFoundHandler((request, reply) => {

@@ -9,3 +9,5 @@ process.env['ENCRYPTION_KEY'] ??= 'a'.repeat(64)
 process.env['WHATSAPP_VERIFY_TOKEN'] ??= 'test-verify-token'
 process.env['WHATSAPP_APP_SECRET'] ??= 'test-app-secret'
 process.env['LOG_LEVEL'] ??= 'fatal'
+process.env['ADMIN_USERNAME'] ??= 'testadmin'
+process.env['ADMIN_PASSWORD'] ??= 'testpassword1'

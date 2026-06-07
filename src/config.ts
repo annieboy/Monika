@@ -31,6 +31,10 @@ const configSchema = z.object({
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
+  // Admin dashboard
+  ADMIN_USERNAME: z.string().min(1).default('admin'),
+  ADMIN_PASSWORD: z.string().min(8, 'Must be at least 8 characters').default('changeme1'),
+
   // Encryption
   ENCRYPTION_KEY: hexKey64.default(''),
   SECRET_KEY: z.string().min(32, 'Must be at least 32 characters. Generate: openssl rand -hex 32').default(''),
