@@ -29,6 +29,7 @@ enum OnboardingStatus {
 enum Provider {
   truelayer
   yapily
+  mock
 }
 
 enum ConsentStatus {

@@ -1,65 +1,91 @@
-/**
- * Open Banking Routes — PLACEHOLDER
- *
- * Handles the TrueLayer OAuth consent flow:
- *
- *   GET /banking/connect  — generates a TrueLayer consent URL and returns it
- *   GET /banking/callback — OAuth callback: exchanges code for tokens, stores them
- *
- * Implementation status: STUB — routes exist and return correct HTTP shapes
- * but perform no real Open Banking operations.
- *
- * See IMPLEMENTATION_PLAN.md § Task 6.2 for the full spec.
- */
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
+import { createMockConnection } from '../../banking/connection.js'
+
+interface ConnectQuery {
+  userId?: string
+  mock?: string
+}
 
 const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   /**
    * GET /banking/connect
    *
-   * Production: validates the user's onboarding token, generates a TrueLayer
-   * hosted consent URL, redirects the user to it.
+   * When ?mock=true is passed (sandbox/demo mode), skips the OAuth flow and
+   * creates a mock bank connection directly, importing 90 days of transactions.
    *
-   * Stub: returns a placeholder response.
+   * Production path (TrueLayer): will validate an onboarding token, generate
+   * a consent URL, and redirect the user — implemented in a later task.
    */
-  app.get('/connect', async (request, reply) => {
-    // TODO (Task 6.2): Validate onboarding token from query params
-    // TODO (Task 6.2): Call TrueLayer to generate consent URL
-    // TODO (Task 6.2): Redirect to TrueLayer consent URL
+  app.get(
+    '/connect',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string', format: 'uuid' },
+            mock: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              connectionId: { type: 'string' },
+              provider: { type: 'string' },
+              accountsSynced: { type: 'number' },
+              transactionsImported: { type: 'number' },
+              transactionsSkipped: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Querystring: ConnectQuery }>,
+      reply: FastifyReply,
+    ) => {
+      const { userId, mock } = request.query
 
-    request.log.info('[STUB] /banking/connect — Open Banking not yet implemented')
+      if (mock === 'true') {
+        if (!userId) {
+          return reply.status(400).send({ error: 'userId is required for mock connection' })
+        }
 
-    return reply.status(200).send({
-      stub: true,
-      message: 'Open Banking integration not yet implemented',
-      nextTask: 'Task 6.2 — BankingService consent management',
-    })
-  })
+        const { connection, syncResult } = await createMockConnection(
+          request.server.prisma,
+          userId,
+        )
+
+        request.log.info(
+          { connectionId: connection.id, ...syncResult },
+          'Mock bank connection created and synced',
+        )
+
+        return reply.status(200).send({
+          connectionId: connection.id,
+          provider: connection.provider,
+          accountsSynced: syncResult.accountsSynced,
+          transactionsImported: syncResult.transactionsImported,
+          transactionsSkipped: syncResult.transactionsSkipped,
+        })
+      }
+
+      // Real OAuth path — placeholder until TrueLayer integration is built
+      return reply.status(200).send({
+        message: 'Real Open Banking OAuth flow not yet implemented. Pass ?mock=true to use the sandbox.',
+      })
+    },
+  )
 
   /**
    * GET /banking/callback
-   *
-   * Production: TrueLayer redirects here after the user grants consent.
-   * Exchanges the auth code for tokens, fetches initial account list,
-   * stores encrypted tokens, triggers initial transaction sync.
-   *
-   * Stub: logs received params and returns 200.
+   * OAuth callback endpoint — TrueLayer redirects here after user grants consent.
+   * Full implementation deferred to the TrueLayer integration task.
    */
   app.get('/callback', async (request, reply) => {
-    // TODO (Task 6.2): Verify state parameter (CSRF protection)
-    // TODO (Task 6.2): Exchange code for tokens via TrueLayer
-    // TODO (Task 6.2): Store encrypted tokens in bank_connections table
-    // TODO (Task 6.3): Enqueue initial transaction sync
-
-    request.log.info(
-      { query: request.query },
-      '[STUB] /banking/callback — Open Banking not yet implemented',
-    )
-
-    return reply.status(200).send({
-      stub: true,
-      message: 'Open Banking callback not yet implemented',
-    })
+    request.log.info({ query: request.query }, 'Banking callback received — not yet implemented')
+    return reply.status(200).send({ stub: true, message: 'Callback not yet implemented' })
   })
 }
 
