@@ -2,55 +2,73 @@ import type { PrismaClient, BankConnection } from '@prisma/client'
 import { encrypt } from '../lib/crypto.js'
 import { config } from '../config.js'
 import { MockOpenBankingProvider, MOCK_CONSENT } from './providers/mock.js'
+import { TrueLayerProvider } from './providers/truelayer.js'
 import { runFullSync } from './sync.js'
 import type { SyncResult } from './sync.js'
+import type { ProviderConsent, OpenBankingProvider } from './types.js'
 
 export interface MockConnectionResult {
   connection: BankConnection
   syncResult: SyncResult
 }
 
+// ── Provider factory ───────────────────────────────────────────────────────
+
 /**
- * Creates a mock bank connection for a user and immediately syncs
- * 90 days of transaction history. Intended for sandbox / demo use.
- *
- * In a real OAuth flow this would be split into two steps:
- *   1. initiateConsent → redirect user to bank
- *   2. handleCallback → exchange code for tokens, store, sync
+ * Returns a TrueLayerProvider when TrueLayer credentials are configured,
+ * otherwise falls back to the MockOpenBankingProvider.
+ * This lets the app work locally without TrueLayer credentials.
  */
-export async function createMockConnection(
+export function resolveProvider(): OpenBankingProvider {
+  if (config.TRUELAYER_CLIENT_ID && config.TRUELAYER_CLIENT_SECRET) {
+    return new TrueLayerProvider(
+      config.TRUELAYER_CLIENT_ID,
+      config.TRUELAYER_CLIENT_SECRET,
+      config.TRUELAYER_REDIRECT_URI,
+      config.TRUELAYER_ENVIRONMENT,
+    )
+  }
+  return new MockOpenBankingProvider()
+}
+
+// ── Shared connection persistence ──────────────────────────────────────────
+
+async function persistConnection(
   prisma: PrismaClient,
   userId: string,
-): Promise<MockConnectionResult> {
-  const provider = new MockOpenBankingProvider()
-  const consent = MOCK_CONSENT
-
-  // Encrypt tokens before storing — AES-256-GCM, application-layer.
-  // Cast to Uint8Array<ArrayBuffer>: Buffer is always backed by ArrayBuffer
-  // at runtime; the TS type says ArrayBufferLike, but Prisma requires the
-  // narrower ArrayBuffer generic.
+  consent: ProviderConsent,
+  providerName: string,
+  bankId: string,
+  bankDisplayName: string,
+): Promise<BankConnection> {
   const accessTokenEnc = encrypt(
     Buffer.from(consent.accessToken, 'utf-8'),
     config.ENCRYPTION_KEY,
   ) as unknown as Uint8Array<ArrayBuffer>
+
   const refreshTokenEnc = consent.refreshToken
-    ? (encrypt(Buffer.from(consent.refreshToken, 'utf-8'), config.ENCRYPTION_KEY) as unknown as Uint8Array<ArrayBuffer>)
+    ? (encrypt(
+        Buffer.from(consent.refreshToken, 'utf-8'),
+        config.ENCRYPTION_KEY,
+      ) as unknown as Uint8Array<ArrayBuffer>)
     : null
 
-  // Upsert the connection — idempotent if called twice for the same user+consent
-  const connection = await prisma.bankConnection.upsert({
-    where: {
-      userId_providerConsentId: {
-        userId,
-        providerConsentId: consent.providerConsentId,
-      },
-    },
+  // Map providerName to the Prisma enum. Treat any truelayer variant as 'truelayer'.
+  const prismaProvider =
+    providerName === 'mock'
+      ? ('mock' as const)
+      : providerName.startsWith('truelayer')
+        ? ('truelayer' as const)
+        : ('mock' as const)
+
+  return prisma.bankConnection.upsert({
+    where: { userId_providerConsentId: { userId, providerConsentId: consent.providerConsentId } },
     create: {
       userId,
-      provider: 'mock',
+      provider: prismaProvider,
       providerConsentId: consent.providerConsentId,
-      bankId: 'mock-bank',
-      bankDisplayName: 'Mock Bank (Sandbox)',
+      bankId,
+      bankDisplayName,
       accessTokenEnc,
       refreshTokenEnc,
       tokenExpiresAt: consent.tokenExpiresAt ?? null,
@@ -64,10 +82,64 @@ export async function createMockConnection(
       consentStatus: 'active',
     },
   })
+}
+
+// ── Mock connection (local dev / tests) ────────────────────────────────────
+
+/**
+ * Creates a mock bank connection and immediately syncs 90 days of
+ * deterministic transaction history. No OAuth required.
+ */
+export async function createMockConnection(
+  prisma: PrismaClient,
+  userId: string,
+): Promise<MockConnectionResult> {
+  const provider = new MockOpenBankingProvider()
+  const consent = MOCK_CONSENT
+
+  const connection = await persistConnection(
+    prisma,
+    userId,
+    consent,
+    'mock',
+    'mock-bank',
+    'Mock Bank (Sandbox)',
+  )
 
   const syncResult = await runFullSync(prisma, connection.id, userId, consent, provider)
 
-  // Mark the user as active after a successful bank connection
+  await prisma.user.update({
+    where: { id: userId },
+    data: { onboardingStatus: 'active' },
+  })
+
+  return { connection, syncResult }
+}
+
+// ── TrueLayer connection (after OAuth callback) ────────────────────────────
+
+/**
+ * Persists a TrueLayer bank connection after the OAuth callback and runs
+ * an initial full sync. Called from /banking/callback.
+ */
+export async function createTrueLayerConnection(
+  prisma: PrismaClient,
+  userId: string,
+  consent: ProviderConsent,
+  provider: OpenBankingProvider,
+  bankDisplayName = 'Your Bank',
+): Promise<MockConnectionResult> {
+  const connection = await persistConnection(
+    prisma,
+    userId,
+    consent,
+    provider.providerName,
+    'truelayer',
+    bankDisplayName,
+  )
+
+  const syncResult = await runFullSync(prisma, connection.id, userId, consent, provider)
+
   await prisma.user.update({
     where: { id: userId },
     data: { onboardingStatus: 'active' },

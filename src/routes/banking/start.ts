@@ -2,7 +2,9 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply 
 import { validateAndConsumeToken } from '../../services/onboarding/token.js'
 import { logConsentEvent } from '../../services/onboarding/audit.js'
 import { successPage, failurePage } from '../../services/onboarding/pages.js'
-import { createMockConnection } from '../../banking/connection.js'
+import { createMockConnection, resolveProvider } from '../../banking/connection.js'
+import { encodeOAuthState } from '../../banking/oauth-state.js'
+import { config } from '../../config.js'
 
 interface StartQuery {
   token?: string
@@ -11,16 +13,14 @@ interface StartQuery {
 /**
  * GET /banking/start?token=<64-char-hex>
  *
- * The in-browser bank connection consent page. Users arrive here by tapping
- * the personalised link Monika sends them in WhatsApp.
+ * Entry point sent to users via WhatsApp. Validates the one-time token and
+ * then branches based on whether TrueLayer is configured:
  *
- * Flow:
- *   1. Validate the one-time token (checks expiry + single-use)
- *   2. Create the mock bank connection and import 90 days of transactions
- *   3. Return a success or failure HTML page
+ *   TrueLayer configured → redirect to TrueLayer auth (userId in signed state)
+ *   No TrueLayer creds   → create mock connection directly (local dev / tests)
  *
- * When a real provider is integrated, step 2 becomes an OAuth redirect.
- * The token validation and audit logging remain unchanged.
+ * The token is always consumed before the redirect so it cannot be reused
+ * even if the user abandons the OAuth flow.
  */
 const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get(
@@ -41,13 +41,10 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
       const prisma = request.server.prisma
 
       if (!token) {
-        return reply
-          .status(400)
-          .type('text/html')
-          .send(failurePage('not_found'))
+        return reply.status(400).type('text/html').send(failurePage('not_found'))
       }
 
-      // ── 1. Validate token ────────────────────────────────────────────────
+      // ── 1. Validate one-time token ────────────────────────────────────────
       const validation = await validateAndConsumeToken(prisma, token)
 
       if (!validation.ok) {
@@ -59,7 +56,6 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
               : 'bank_connect_token_not_found'
 
         await logConsentEvent(prisma, auditEvent, null, { token: token.slice(0, 8) + '…' })
-
         request.log.warn({ reason: validation.reason }, 'Bank connect token validation failed')
 
         const pageReason =
@@ -73,12 +69,32 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
 
       const { userId } = validation
-
       await logConsentEvent(prisma, 'bank_connect_token_opened', userId, {
         token: token.slice(0, 8) + '…',
       })
 
-      // ── 2. Create bank connection + sync transactions ─────────────────────
+      const provider = resolveProvider()
+      const isTrueLayer = provider.providerName !== 'mock'
+
+      // ── 2a. TrueLayer: redirect to bank auth ─────────────────────────────
+      if (isTrueLayer) {
+        if (!config.SECRET_KEY) {
+          request.log.error('SECRET_KEY must be set for TrueLayer OAuth state signing')
+          return reply.status(500).type('text/html').send(failurePage('error'))
+        }
+
+        const state = encodeOAuthState(userId, config.SECRET_KEY)
+        const { authUrl } = await provider.initiateConsent(userId, config.TRUELAYER_REDIRECT_URI)
+
+        // Replace the random state TrueLayer generated with our signed one
+        const url = new URL(authUrl)
+        url.searchParams.set('state', state)
+
+        request.log.info({ userId }, 'Redirecting to TrueLayer consent')
+        return reply.redirect(url.toString(), 302)
+      }
+
+      // ── 2b. Mock: create connection directly ──────────────────────────────
       try {
         const { connection, syncResult } = await createMockConnection(prisma, userId)
 
@@ -91,7 +107,7 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
 
         request.log.info(
           { userId, connectionId: connection.id, ...syncResult },
-          'Bank connection completed via consent flow',
+          'Mock bank connection completed via consent flow',
         )
 
         return reply
@@ -102,9 +118,7 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
         await logConsentEvent(prisma, 'bank_connect_failed', userId, {
           error: err instanceof Error ? err.message : String(err),
         })
-
-        request.log.error({ err, userId }, 'Bank connection failed during consent flow')
-
+        request.log.error({ err, userId }, 'Mock bank connection failed')
         return reply.status(500).type('text/html').send(failurePage('error'))
       }
     },

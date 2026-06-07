@@ -1,5 +1,9 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
-import { createMockConnection } from '../../banking/connection.js'
+import { createMockConnection, createTrueLayerConnection, resolveProvider } from '../../banking/connection.js'
+import { decodeOAuthState } from '../../banking/oauth-state.js'
+import { logConsentEvent } from '../../services/onboarding/audit.js'
+import { successPage, failurePage } from '../../services/onboarding/pages.js'
+import { config } from '../../config.js'
 import bankingStartRoute from './start.js'
 
 interface ConnectQuery {
@@ -7,18 +11,22 @@ interface ConnectQuery {
   mock?: string
 }
 
+interface CallbackQuery {
+  code?: string
+  state?: string
+  error?: string
+  error_description?: string
+}
+
 const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── GET /banking/start?token=... ─────────────────────────────────────────
-  // Primary consent entry point: validates a one-time token and creates the
-  // bank connection. Used from WhatsApp links.
   await app.register(bankingStartRoute)
 
+  // ── GET /banking/connect ──────────────────────────────────────────────────
   /**
-   * GET /banking/connect
-   *
-   * Direct connection endpoint, primarily for internal/admin use.
-   * When ?mock=true: skips OAuth and connects the mock provider immediately.
-   * Production path (TrueLayer): generate consent URL and redirect.
+   * Direct connection endpoint for internal/admin use.
+   * ?mock=true  — bypass OAuth, use MockOpenBankingProvider immediately.
+   * (no params) — returns a usage hint.
    */
   app.get(
     '/connect',
@@ -29,18 +37,6 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           properties: {
             userId: { type: 'string', format: 'uuid' },
             mock: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              connectionId: { type: 'string' },
-              provider: { type: 'string' },
-              accountsSynced: { type: 'number' },
-              transactionsImported: { type: 'number' },
-              transactionsSkipped: { type: 'number' },
-            },
           },
         },
       },
@@ -55,17 +51,11 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         if (!userId) {
           return reply.status(400).send({ error: 'userId is required for mock connection' })
         }
-
         const { connection, syncResult } = await createMockConnection(
           request.server.prisma,
           userId,
         )
-
-        request.log.info(
-          { connectionId: connection.id, ...syncResult },
-          'Mock bank connection created and synced',
-        )
-
+        request.log.info({ connectionId: connection.id, ...syncResult }, 'Mock bank connection created')
         return reply.status(200).send({
           connectionId: connection.id,
           provider: connection.provider,
@@ -76,20 +66,105 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
 
       return reply.status(200).send({
-        message: 'Real Open Banking OAuth not yet implemented. Use ?mock=true for sandbox.',
+        message: 'Use /banking/start?token=<token> to initiate consent via WhatsApp link, or ?mock=true for sandbox.',
       })
     },
   )
 
+  // ── GET /banking/callback ─────────────────────────────────────────────────
   /**
-   * GET /banking/callback
-   * OAuth callback — real provider redirects here after user grants consent.
-   * Deferred to the TrueLayer integration task.
+   * TrueLayer OAuth callback. TrueLayer redirects here after the user grants
+   * (or denies) consent at their bank.
+   *
+   * Success: ?code=<auth_code>&state=<signed_state>
+   * Failure: ?error=<reason>&error_description=<detail>
    */
-  app.get('/callback', async (request, reply) => {
-    request.log.info({ query: request.query }, 'Banking callback received — not yet implemented')
-    return reply.status(200).send({ stub: true, message: 'Callback not yet implemented' })
-  })
+  app.get(
+    '/callback',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' },
+            state: { type: 'string' },
+            error: { type: 'string' },
+            error_description: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Querystring: CallbackQuery }>,
+      reply: FastifyReply,
+    ) => {
+      const { code, state, error, error_description } = request.query
+      const prisma = request.server.prisma
+
+      // ── User denied or provider error ─────────────────────────────────
+      if (error) {
+        request.log.warn({ error, error_description }, 'TrueLayer callback error')
+        await logConsentEvent(prisma, 'bank_connect_failed', null, { error, description: error_description })
+        return reply.status(400).type('text/html').send(failurePage('error', error_description))
+      }
+
+      if (!code || !state) {
+        return reply.status(400).type('text/html').send(failurePage('error', 'Missing code or state'))
+      }
+
+      // ── Verify signed state → recover userId ──────────────────────────
+      if (!config.SECRET_KEY) {
+        request.log.error('SECRET_KEY not set — cannot verify OAuth state')
+        return reply.status(500).type('text/html').send(failurePage('error'))
+      }
+
+      const userId = decodeOAuthState(state, config.SECRET_KEY)
+      if (!userId) {
+        request.log.warn({ state: state.slice(0, 20) }, 'Invalid or expired OAuth state')
+        await logConsentEvent(prisma, 'bank_connect_failed', null, { reason: 'invalid_state' })
+        return reply
+          .status(400)
+          .type('text/html')
+          .send(failurePage('error', 'The consent link has expired. Please request a new one from WhatsApp.'))
+      }
+
+      // ── Exchange code → tokens, create connection, sync ───────────────
+      try {
+        const provider = resolveProvider()
+        const consent = await provider.exchangeCode(code, state)
+
+        const { connection, syncResult } = await createTrueLayerConnection(
+          prisma,
+          userId,
+          consent,
+          provider,
+        )
+
+        await logConsentEvent(prisma, 'bank_connect_completed', userId, {
+          connectionId: connection.id,
+          provider: connection.provider,
+          accountsSynced: syncResult.accountsSynced,
+          transactionsImported: syncResult.transactionsImported,
+        })
+
+        request.log.info(
+          { userId, connectionId: connection.id, ...syncResult },
+          'TrueLayer bank connection completed',
+        )
+
+        return reply
+          .status(200)
+          .type('text/html')
+          .send(successPage(syncResult.transactionsImported, syncResult.accountsSynced))
+      } catch (err) {
+        await logConsentEvent(prisma, 'bank_connect_failed', userId, {
+          error: err instanceof Error ? err.message : String(err),
+        })
+        request.log.error({ err, userId }, 'TrueLayer connection failed')
+        return reply.status(500).type('text/html').send(failurePage('error'))
+      }
+    },
+  )
 }
 
 export default bankingRoutes
