@@ -35,6 +35,12 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
     user: {
       upsert: vi.fn().mockResolvedValue({ id: 'user-id', createdAt: new Date(), updatedAt: new Date() }),
     },
+    onboardingToken: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
+    },
     ...overrides,
   } as unknown as PrismaClient
 }

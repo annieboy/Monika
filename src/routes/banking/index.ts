@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { createMockConnection } from '../../banking/connection.js'
+import bankingStartRoute from './start.js'
 
 interface ConnectQuery {
   userId?: string
@@ -7,14 +8,17 @@ interface ConnectQuery {
 }
 
 const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
+  // ── GET /banking/start?token=... ─────────────────────────────────────────
+  // Primary consent entry point: validates a one-time token and creates the
+  // bank connection. Used from WhatsApp links.
+  await app.register(bankingStartRoute)
+
   /**
    * GET /banking/connect
    *
-   * When ?mock=true is passed (sandbox/demo mode), skips the OAuth flow and
-   * creates a mock bank connection directly, importing 90 days of transactions.
-   *
-   * Production path (TrueLayer): will validate an onboarding token, generate
-   * a consent URL, and redirect the user — implemented in a later task.
+   * Direct connection endpoint, primarily for internal/admin use.
+   * When ?mock=true: skips OAuth and connects the mock provider immediately.
+   * Production path (TrueLayer): generate consent URL and redirect.
    */
   app.get(
     '/connect',
@@ -71,17 +75,16 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         })
       }
 
-      // Real OAuth path — placeholder until TrueLayer integration is built
       return reply.status(200).send({
-        message: 'Real Open Banking OAuth flow not yet implemented. Pass ?mock=true to use the sandbox.',
+        message: 'Real Open Banking OAuth not yet implemented. Use ?mock=true for sandbox.',
       })
     },
   )
 
   /**
    * GET /banking/callback
-   * OAuth callback endpoint — TrueLayer redirects here after user grants consent.
-   * Full implementation deferred to the TrueLayer integration task.
+   * OAuth callback — real provider redirects here after user grants consent.
+   * Deferred to the TrueLayer integration task.
    */
   app.get('/callback', async (request, reply) => {
     request.log.info({ query: request.query }, 'Banking callback received — not yet implemented')

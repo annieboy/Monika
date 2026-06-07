@@ -9,6 +9,9 @@ import {
   formatAccountBalances,
   polishWithLlm,
 } from '../analytics/formatter.js'
+import { generateOnboardingToken } from '../onboarding/token.js'
+import { logConsentEvent } from '../onboarding/audit.js'
+import { config } from '../../config.js'
 
 // ── Payment guard ──────────────────────────────────────────────────────────
 
@@ -30,19 +33,45 @@ export function isPaymentRequest(message: string): boolean {
 export const PAYMENT_REJECTION =
   'Payments are not supported yet. Monika is a read-only finance assistant — I can show you your money, but I cannot move it.'
 
-const NO_BANK_MESSAGE =
-  "You haven't connected a bank account yet. To get started, reply with \"Connect my bank\" and I'll walk you through it."
+// ── Bank connection link ───────────────────────────────────────────────────
 
-// ── Static responses for intents that don't need data ─────────────────────
+/** True if the message explicitly requests a bank connection. */
+const CONNECT_BANK_PATTERNS = [
+  /connect\s+(my\s+)?(bank|account)/i,
+  /link\s+(my\s+)?(bank|account)/i,
+  /add\s+(my\s+)?(bank|account)/i,
+  /set\s+up\s+(my\s+)?(bank|account)/i,
+  /get\s+started/i,
+]
 
-const STATIC_RESPONSES: Partial<Record<Intent, string>> = {
-  onboarding_help:
-    "Welcome to Monika! I'm your AI-powered UK finance assistant. To get started, connect your bank account — I'll then help you track spending, spot subscriptions, and answer questions about your money.",
-  affordability_question:
-    "To answer affordability questions accurately I need to see your income and recent outgoings. I can see your balance and spending — ask me things like \"What's my balance?\" or \"How much have I spent this month?\" to help you decide.",
-  unknown:
-    "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"What subscriptions am I paying for?\", or \"What's my balance?\"",
+function isConnectBankRequest(message: string): boolean {
+  return CONNECT_BANK_PATTERNS.some((p) => p.test(message))
 }
+
+/**
+ * Generates a one-time onboarding token, logs the event, and returns a
+ * WhatsApp-ready message containing the consent link.
+ */
+async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<string> {
+  const token = await generateOnboardingToken(prisma, userId)
+  const link = `${config.APP_BASE_URL}/banking/start?token=${token}`
+  await logConsentEvent(prisma, 'bank_connect_link_sent', userId, { link })
+  return (
+    `To connect your bank, tap this link — it expires in 15 minutes:\n${link}\n\n` +
+    `Once connected, I'll import your last 90 days of transactions automatically.`
+  )
+}
+
+// ── Static responses ───────────────────────────────────────────────────────
+
+const STATIC_ONBOARDING =
+  "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or unusual transactions. To get started, say \"connect my bank\"."
+
+const STATIC_AFFORDABILITY =
+  "To answer affordability questions I need to see your income and outgoings. Ask me \"What's my balance?\" or \"How much have I spent this month?\" to help you decide."
+
+const STATIC_UNKNOWN =
+  "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"What subscriptions am I paying for?\", or \"What's my balance?\""
 
 // ── Main router ────────────────────────────────────────────────────────────
 
@@ -53,18 +82,32 @@ export async function routeIntent(
   prisma: PrismaClient,
   anthropicApiKey = '',
 ): Promise<string> {
-  // Payment requests are blocked before any DB access
+  // Payment requests blocked unconditionally
   if (isPaymentRequest(message)) return PAYMENT_REJECTION
-
-  // Static intents need no data lookup
-  const staticResponse = STATIC_RESPONSES[intent]
-  if (staticResponse) return staticResponse
 
   const analytics = new TransactionAnalyticsService(prisma)
 
-  // All data-driven intents require an active bank connection
+  // ── onboarding_help ────────────────────────────────────────────────────
+  if (intent === 'onboarding_help') {
+    // "connect my bank" → generate a personalised link
+    if (isConnectBankRequest(message)) {
+      const alreadyConnected = await analytics.hasActiveBankConnection(userId)
+      if (alreadyConnected) {
+        return "Your bank is already connected. You can ask me about your spending, subscriptions, or balance."
+      }
+      return buildConnectLink(prisma, userId)
+    }
+    return STATIC_ONBOARDING
+  }
+
+  // ── Static non-data intents ─────────────────────────────────────────────
+  if (intent === 'affordability_question') return STATIC_AFFORDABILITY
+  if (intent === 'unknown') return STATIC_UNKNOWN
+
+  // ── Data-driven intents ─────────────────────────────────────────────────
+  // All require an active bank connection; missing connection → generate link
   if (!(await analytics.hasActiveBankConnection(userId))) {
-    return NO_BANK_MESSAGE
+    return buildConnectLink(prisma, userId)
   }
 
   const { fromDate, toDate, categoryFilter } = extractQueryContext(message)
@@ -88,7 +131,6 @@ export async function routeIntent(
     }
 
     case 'unusual_spending': {
-      // Use a 30-day window for anomaly detection regardless of message phrasing
       const unusualFrom = new Date(Date.now() - 30 * 86_400_000)
       const transactions = await analytics.getUnusualSpending(userId, unusualFrom, new Date())
       structuredText = formatUnusualSpending(transactions)
@@ -102,10 +144,9 @@ export async function routeIntent(
     }
 
     default:
-      return STATIC_RESPONSES['unknown']!
+      return STATIC_UNKNOWN
   }
 
-  // Optionally polish with LLM — falls back to structuredText on any failure
   if (anthropicApiKey) {
     return polishWithLlm(intent, structuredText, message, anthropicApiKey)
   }

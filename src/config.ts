@@ -23,6 +23,7 @@ const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  APP_BASE_URL: z.string().url().default('http://localhost:3000'),
 
   // Database
   DATABASE_URL: z.string().url().startsWith('postgresql://'),

@@ -13,6 +13,8 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       findMany: vi.fn().mockResolvedValue([]),
     },
     account: { findMany: vi.fn().mockResolvedValue([]) },
+    onboardingToken: { create: vi.fn().mockResolvedValue({}) },
+    auditLog: { create: vi.fn().mockResolvedValue({}) },
     ...overrides,
   } as unknown as PrismaClient
 }
@@ -143,6 +145,53 @@ describe('routeIntent — no bank connection', () => {
   it('account_balance prompts to connect bank', async () => {
     const response = await routeIntent('account_balance', "What's my balance?", USER_ID, disconnectedPrisma())
     expect(response.toLowerCase()).toContain('connect')
+  })
+})
+
+// ── onboarding_help — connect bank request ─────────────────────────────────
+
+describe('routeIntent — onboarding_help connect bank', () => {
+  it('returns a link when "connect my bank" is requested and no connection exists', async () => {
+    const disconnected = makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+    const response = await routeIntent('onboarding_help', 'connect my bank', USER_ID, disconnected)
+    expect(response).toContain('/banking/start?token=')
+    expect(response).toContain('15 minutes')
+  })
+
+  it('tells user bank is already connected when they ask to connect again', async () => {
+    const connected = makePrisma()
+    const response = await routeIntent('onboarding_help', 'connect my bank', USER_ID, connected)
+    expect(response.toLowerCase()).toContain('already connected')
+  })
+
+  it('returns general help text for non-connect onboarding messages', async () => {
+    const prisma = makePrisma()
+    const response = await routeIntent('onboarding_help', 'what can you do?', USER_ID, prisma)
+    expect(response).not.toContain('/banking/start')
+    expect(response.length).toBeGreaterThan(10)
+  })
+
+  it('link includes a 64-char hex token', async () => {
+    const disconnected = makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+    const response = await routeIntent('onboarding_help', 'link my bank account', USER_ID, disconnected)
+    const match = response.match(/token=([0-9a-f]+)/)
+    expect(match).not.toBeNull()
+    expect(match![1]).toHaveLength(64)
+  })
+
+  it('logs a bank_connect_link_sent audit event', async () => {
+    const disconnected = makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+    await routeIntent('onboarding_help', 'connect my bank', USER_ID, disconnected)
+    const auditCreate = disconnected.auditLog.create as ReturnType<typeof vi.fn>
+    expect(auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ eventType: 'bank_connect_link_sent' }) }),
+    )
+  })
+
+  it('data-driven intent without bank includes the link', async () => {
+    const disconnected = makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+    const response = await routeIntent('spending_analysis', 'How much did I spend?', USER_ID, disconnected)
+    expect(response).toContain('/banking/start?token=')
   })
 })
 
