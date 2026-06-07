@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, type-check, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: monika_test
+          POSTGRES_USER: monika
+          POSTGRES_PASSWORD: monika
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      APP_ENV: test
+      LOG_LEVEL: WARNING
+      DATABASE_URL: postgresql+asyncpg://monika:monika@localhost:5432/monika_test
+      DATABASE_URL_SYNC: postgresql://monika:monika@localhost:5432/monika_test
+      REDIS_URL: redis://localhost:6379
+      SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      ENCRYPTION_KEY_VERSION: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.17"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check backend/
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check backend/
+
+      - name: Type check (mypy)
+        run: uv run mypy backend/ --exclude backend/tests
+
+      - name: Run tests
+        run: uv run pytest backend/tests/ -v
