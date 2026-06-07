@@ -1,0 +1,63 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: monika:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      APP_BASE_URL: ${APP_BASE_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      TRUELAYER_CLIENT_ID: ${TRUELAYER_CLIENT_ID}
+      TRUELAYER_CLIENT_SECRET: ${TRUELAYER_CLIENT_SECRET}
+      TRUELAYER_REDIRECT_URI: ${TRUELAYER_REDIRECT_URI}
+      TRUELAYER_ENVIRONMENT: ${TRUELAYER_ENVIRONMENT:-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis_data:

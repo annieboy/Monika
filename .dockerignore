@@ -1,0 +1,46 @@
+# Source control
+.git
+.gitignore
+
+# Dependencies — reinstalled inside the image
+node_modules
+
+# Build output — rebuilt inside the image
+dist
+
+# Local environment — secrets must never enter the image
+.env
+.env.*
+!.env.example
+
+# Dev tooling
+.eslintrc*
+.prettierrc*
+*.md
+docs
+htmlcov
+
+# Test artefacts
+coverage
+.nyc_output
+
+# Python artefacts (legacy)
+__pycache__
+*.pyc
+*.pyo
+uv.lock
+pyproject.toml
+backend
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scripts not needed at runtime
+scripts/e2e-mvp.ts

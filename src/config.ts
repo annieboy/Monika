@@ -49,6 +49,9 @@ const configSchema = z.object({
   ANTHROPIC_API_KEY: z.string().default(''),
   OPENAI_API_KEY: z.string().default(''),
 
+  // Error monitoring
+  SENTRY_DSN: z.string().default(''),
+
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
@@ -71,7 +74,24 @@ function loadConfig(): Config {
     process.exit(1)
   }
 
-  return result.data
+  const cfg = result.data
+
+  // In production, secrets must be explicitly set — empty defaults are not acceptable.
+  if (cfg.NODE_ENV === 'production') {
+    const missing: string[] = []
+    if (!cfg.ENCRYPTION_KEY) missing.push('ENCRYPTION_KEY (generate: openssl rand -hex 32)')
+    if (!cfg.SECRET_KEY) missing.push('SECRET_KEY (generate: openssl rand -hex 32)')
+    if (cfg.ADMIN_PASSWORD === 'changeme1') missing.push('ADMIN_PASSWORD (change from default)')
+    if (missing.length > 0) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `\n[config] Production secrets not configured:\n${missing.map((m) => `  ${m}`).join('\n')}\n`,
+      )
+      process.exit(1)
+    }
+  }
+
+  return cfg
 }
 
 export const config = loadConfig()

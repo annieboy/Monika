@@ -8,18 +8,31 @@
 import { config } from './config.js'
 import { logger } from './logger.js'
 import { buildApp } from './app.js'
+import { initMonitoring, flushMonitoring, captureException } from './lib/monitoring.js'
 
 async function start(): Promise<void> {
+  await initMonitoring()
+
   const app = await buildApp()
 
   // Graceful shutdown — give in-flight requests up to 30s to complete
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Shutdown signal received — closing server')
+
+    // Hard timeout: if shutdown takes >30s, force exit
+    const hardTimeout = setTimeout(() => {
+      logger.error('Graceful shutdown timed out after 30s — forcing exit')
+      process.exit(1)
+    }, 30_000)
+    hardTimeout.unref()
+
     try {
       await app.close()
+      await flushMonitoring(2000)
       logger.info('Server closed cleanly')
       process.exit(0)
     } catch (err) {
+      captureException(err)
       logger.error({ err }, 'Error during shutdown')
       process.exit(1)
     }
@@ -30,6 +43,7 @@ async function start(): Promise<void> {
 
   // Unhandled promise rejections should never silently swallow errors
   process.on('unhandledRejection', (reason) => {
+    captureException(reason)
     logger.error({ reason }, 'Unhandled promise rejection — this is a bug')
     process.exit(1)
   })

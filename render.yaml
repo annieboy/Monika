@@ -1,0 +1,72 @@
+# Render deployment configuration
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: monika
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: london
+    plan: starter
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: LOG_LEVEL
+        value: info
+      - key: TRUELAYER_ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: monika-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: monika-redis
+          type: redis
+          property: connectionString
+      # Secrets — set via Render dashboard or CLI
+      - key: APP_BASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: TRUELAYER_CLIENT_ID
+        sync: false
+      - key: TRUELAYER_CLIENT_SECRET
+        sync: false
+      - key: TRUELAYER_REDIRECT_URI
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+
+databases:
+  - name: monika-db
+    databaseName: monika
+    region: london
+    plan: starter
+
+  - name: monika-redis
+    type: redis
+    region: london
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
