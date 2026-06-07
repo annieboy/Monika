@@ -28,6 +28,8 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
     // Use our pre-configured Pino logger — Fastify will use this instance
     // for all internal logging (request start, close, errors).
     loggerInstance: logger,
+    // Treat /foo and /foo/ as the same route — avoids 404 on missing trailing slash
+    ignoreTrailingSlash: true,
     // Trust the X-Forwarded-For header from load balancers in production
     trustProxy: config.NODE_ENV === 'production',
   })
