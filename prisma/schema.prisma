@@ -320,6 +320,7 @@ model Conversation {
 
   // WhatsApp tracking
   waMessageId String? @map("wa_message_id") @db.VarChar(255)
+  waStatus    String? @map("wa_status") @db.VarChar(16)  // sent | delivered | read | failed
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 

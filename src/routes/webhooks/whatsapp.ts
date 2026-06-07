@@ -1,8 +1,25 @@
+/**
+ * POST /webhooks/whatsapp — Meta WhatsApp Cloud API webhook
+ * GET  /webhooks/whatsapp — Meta webhook verification handshake
+ *
+ * Inbound flow:
+ *   1. HMAC-SHA256 signature verification (mandatory, rejects without it)
+ *   2. Parse text messages + delivery status updates from the same payload
+ *   3. Text messages → processInboundMessage → classify + store
+ *   4. Send AI reply back to user via Meta Cloud API
+ *   5. Store outbound wamid on the assistant Conversation row
+ *   6. Status updates → processStatusUpdate → update wa_status on conversation
+ *
+ * Security: raw body is captured as Buffer before JSON parsing so the HMAC
+ * is computed over exactly what Meta signed.
+ */
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { config } from '../../config.js'
 import { verifyHmacSignature } from '../../lib/crypto.js'
-import { parseTextMessage } from '../../services/whatsapp/parser.js'
+import { parseTextMessage, parseStatusUpdates } from '../../services/whatsapp/parser.js'
 import { processInboundMessage } from '../../services/whatsapp/webhook.js'
+import { sendWhatsAppMessage, SendError } from '../../services/whatsapp/sender.js'
+import { processStatusUpdate } from '../../services/whatsapp/status.js'
 import type { WhatsAppWebhookPayload } from '../../types/whatsapp.js'
 
 interface VerifyQuery {
@@ -14,7 +31,7 @@ interface VerifyQuery {
 const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   /**
    * GET /webhooks/whatsapp
-   * Meta calls this during webhook setup to verify we own the endpoint.
+   * Meta calls this once during webhook setup to verify endpoint ownership.
    */
   app.get(
     '/whatsapp',
@@ -51,10 +68,8 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   /**
    * POST /webhooks/whatsapp
-   * Receives inbound messages and status updates from Meta.
-   *
-   * Security: HMAC-SHA256 signature verification is mandatory and happens before
-   * JSON parsing. We capture the raw body as a Buffer to compute the HMAC.
+   * Receives inbound messages and delivery status updates from Meta.
+   * Must return 200 quickly — Meta retries if we take >20 s or return non-2xx.
    */
   app.addContentTypeParser(
     'application/json',
@@ -98,7 +113,17 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         return reply.status(400).send({ error: 'Invalid JSON' })
       }
 
-      // ── 3. Extract text message (ignore status updates, media, etc.) ───────
+      const prisma = request.server.prisma
+
+      // ── 3. Handle delivery status updates (fire-and-forget errors) ─────────
+      const statusUpdates = parseStatusUpdates(payload)
+      for (const update of statusUpdates) {
+        processStatusUpdate(prisma, update).catch((err: unknown) => {
+          request.log.error({ err, waMessageId: update.waMessageId }, 'Failed to store status update')
+        })
+      }
+
+      // ── 4. Extract the first text message ─────────────────────────────────
       const parsed = parseTextMessage(payload)
       if (!parsed) {
         return reply.status(200).send({ status: 'ok' })
@@ -107,9 +132,9 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const wabaId =
         payload.entry[0]?.changes[0]?.value.metadata.phone_number_id ?? ''
 
-      // ── 4. Store message ───────────────────────────────────────────────────
+      // ── 5. Deduplicate + classify + store ──────────────────────────────────
       const result = await processInboundMessage(
-        request.server.prisma,
+        prisma,
         parsed.waMessageId,
         parsed.from,
         parsed.text,
@@ -122,9 +147,39 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
 
       request.log.info(
-        { userId: result.userId, isNewUser: result.isNewUser, waMessageId: parsed.waMessageId },
-        'WhatsApp message stored',
+        { userId: result.userId, isNewUser: result.isNewUser, intent: result.intent },
+        'WhatsApp message processed',
       )
+
+      // ── 6. Send AI reply back via WhatsApp ─────────────────────────────────
+      const phoneNumberId = config.WHATSAPP_PHONE_NUMBER_ID
+      const accessToken = config.WHATSAPP_ACCESS_TOKEN
+
+      if (phoneNumberId && accessToken) {
+        sendWhatsAppMessage(parsed.from, result.response, phoneNumberId, accessToken)
+          .then(({ waMessageId: outboundWamid }) => {
+            // Store outbound wamid on the assistant row so status callbacks resolve
+            return prisma.conversation.update({
+              where: { id: result.responseConversationId },
+              data: { waMessageId: outboundWamid, waStatus: 'sent' },
+            })
+          })
+          .catch((err: unknown) => {
+            if (err instanceof SendError) {
+              request.log.error(
+                { err, userId: result.userId, statusCode: err.statusCode },
+                'Failed to send WhatsApp reply',
+              )
+            } else {
+              request.log.error({ err, userId: result.userId }, 'Unexpected error sending WhatsApp reply')
+            }
+          })
+      } else {
+        request.log.warn(
+          { userId: result.userId },
+          'WhatsApp credentials not configured — reply not sent',
+        )
+      }
 
       return reply.status(200).send({ status: 'ok' })
     },

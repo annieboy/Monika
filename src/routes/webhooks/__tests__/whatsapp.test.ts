@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createHmac } from 'crypto'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -45,6 +45,34 @@ function makePayload(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({ ...base, ...overrides })
 }
 
+function makeStatusPayload(wamid: string, status: string): string {
+  return JSON.stringify({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'entry-1',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '447700900000', phone_number_id: 'waba-123' },
+              statuses: [
+                {
+                  id: wamid,
+                  status,
+                  timestamp: '1717776100',
+                  recipient_id: '447700900001',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  })
+}
+
 // ── Mock Prisma ────────────────────────────────────────────────────────────
 
 function makeMockPrisma(): PrismaClient {
@@ -60,6 +88,7 @@ function makeMockPrisma(): PrismaClient {
     conversation: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'conv-uuid' }),
+      update: vi.fn().mockResolvedValue({}),
     },
   } as unknown as PrismaClient
 }
@@ -76,6 +105,23 @@ async function buildTestApp(prisma: PrismaClient): Promise<FastifyInstance> {
   await app.register(whatsappRoutes, { prefix: '/webhooks' })
   return app
 }
+
+// Mock the sender so tests don't hit the real Meta API
+vi.mock('../../../services/whatsapp/sender.js', () => ({
+  sendWhatsAppMessage: vi.fn().mockResolvedValue({ waMessageId: 'wamid.outbound' }),
+  SendError: class SendError extends Error {
+    statusCode: number | undefined
+    constructor(message: string, statusCode?: number) {
+      super(message)
+      this.name = 'SendError'
+      this.statusCode = statusCode
+    }
+  },
+}))
+
+afterEach(() => {
+  vi.clearAllMocks()
+})
 
 // ── GET /webhooks/whatsapp — webhook verification ──────────────────────────
 
@@ -120,12 +166,12 @@ describe('GET /webhooks/whatsapp', () => {
 
 // ── POST /webhooks/whatsapp — inbound messages ─────────────────────────────
 
-describe('POST /webhooks/whatsapp', () => {
+describe('POST /webhooks/whatsapp — inbound text messages', () => {
   let prisma: PrismaClient
   let app: FastifyInstance
 
   beforeEach(async () => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     prisma = makeMockPrisma()
     app = await buildTestApp(prisma)
   })
@@ -209,7 +255,7 @@ describe('POST /webhooks/whatsapp', () => {
               value: {
                 messaging_product: 'whatsapp',
                 metadata: { display_phone_number: '447700900000', phone_number_id: 'waba-123' },
-                statuses: [{ id: 'wamid.status', status: 'delivered' }],
+                statuses: [{ id: 'wamid.status', status: 'delivered', timestamp: '123', recipient_id: '447' }],
               },
             },
           ],
@@ -288,5 +334,108 @@ describe('POST /webhooks/whatsapp', () => {
     expect(hash).toMatch(/^[0-9a-f]{64}$/)
     // Must NOT be the raw phone number
     expect(hash).not.toBe('447700900001')
+  })
+})
+
+// ── POST /webhooks/whatsapp — outbound send ────────────────────────────────
+
+describe('POST /webhooks/whatsapp — outbound reply', () => {
+  let prisma: PrismaClient
+  let app: FastifyInstance
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    prisma = makeMockPrisma()
+    app = await buildTestApp(prisma)
+  })
+
+  it('calls sendWhatsAppMessage when credentials are configured', async () => {
+    const { sendWhatsAppMessage } = await import('../../../services/whatsapp/sender.js')
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
+      body,
+    })
+
+    // Allow the fire-and-forget promise to settle
+    await vi.runAllTimersAsync().catch(() => undefined)
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(sendWhatsAppMessage).toHaveBeenCalledWith(
+      '447700900001',    // recipient from payload
+      expect.any(String), // AI response text
+      expect.any(String), // phoneNumberId from config
+      expect.any(String), // accessToken from config
+    )
+  })
+
+  it('still returns 200 even when sendWhatsAppMessage rejects', async () => {
+    const { sendWhatsAppMessage } = await import('../../../services/whatsapp/sender.js')
+    ;(sendWhatsAppMessage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Network failure'),
+    )
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
+      body,
+    })
+
+    expect(res.statusCode).toBe(200)
+  })
+})
+
+// ── POST /webhooks/whatsapp — status updates ───────────────────────────────
+
+describe('POST /webhooks/whatsapp — delivery status updates', () => {
+  let prisma: PrismaClient
+  let app: FastifyInstance
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    prisma = makeMockPrisma()
+    // Make conversation findFirst return a matching row for status updates
+    ;(prisma.conversation.findFirst as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ id: 'conv-assistant', waStatus: 'sent' })
+    app = await buildTestApp(prisma)
+  })
+
+  it('returns 200 for a delivery status payload', async () => {
+    const body = makeStatusPayload('wamid.outbound123', 'delivered')
+    const sig = sign(body, APP_SECRET)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
+      body,
+    })
+
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('does not create conversation rows for status-only payloads', async () => {
+    // findFirst returns null for dedup check when there's no message
+    ;(prisma.conversation.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+    const body = makeStatusPayload('wamid.outbound123', 'read')
+    const sig = sign(body, APP_SECRET)
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
+      body,
+    })
+
+    expect(prisma.conversation.create).not.toHaveBeenCalled()
   })
 })
