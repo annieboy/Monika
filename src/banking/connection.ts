@@ -53,13 +53,13 @@ async function persistConnection(
       ) as unknown as Uint8Array<ArrayBuffer>)
     : null
 
-// Map providerName to the Prisma enum. Treat any variant as uppercase to match the DB constraints.
+// Map providerName to the Prisma enum. 
   const prismaProvider =
     providerName.toLowerCase() === 'mock'
-      ? ('MOCK' as any)
+      ? ('mock' as const)
       : providerName.toLowerCase().startsWith('truelayer')
-        ? ('TRUELAYER' as any)
-        : ('MOCK' as any)
+        ? ('truelayer' as const)
+        : ('mock' as const)
 
   return prisma.bankConnection.upsert({
     where: { userId_providerConsentId: { userId, providerConsentId: consent.providerConsentId } },
