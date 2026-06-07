@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto'
 import type { PrismaClient } from '@prisma/client'
 
-const TOKEN_TTL_MS = 15 * 60 * 1000  // 15 minutes — matches OnboardingToken schema comment
+const TOKEN_TTL_MS = 15 * 60 * 1000  // 15 minutes
 
 /**
  * Generates a cryptographically random 256-bit (64-char hex) one-time token
@@ -28,28 +28,42 @@ export type TokenValidationResult =
   | { ok: false; reason: 'not_found' | 'wrong_purpose' | 'already_used' | 'expired' }
 
 /**
- * Validates a token and atomically marks it as used.
- * Returns the userId on success, or a typed failure reason.
- * After this call returns ok:true, the token cannot be used again.
+ * Validates a token and atomically marks it as used in a single transaction.
+ *
+ * Atomicity guarantee: the SELECT and UPDATE run inside a serializable
+ * transaction so concurrent requests with the same token cannot both succeed.
+ * The second request will either see usedAt already set (optimistic path) or
+ * hit a serialization error that the client retries — either way only one
+ * request wins.
  */
 export async function validateAndConsumeToken(
   prisma: PrismaClient,
   token: string,
 ): Promise<TokenValidationResult> {
-  const record = await prisma.onboardingToken.findUnique({
-    where: { token },
-    select: { userId: true, expiresAt: true, usedAt: true, purpose: true },
-  })
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const record = await tx.onboardingToken.findUnique({
+          where: { token },
+          select: { userId: true, expiresAt: true, usedAt: true, purpose: true },
+        })
 
-  if (!record) return { ok: false, reason: 'not_found' }
-  if (record.purpose !== 'bank_connect') return { ok: false, reason: 'wrong_purpose' }
-  if (record.usedAt !== null) return { ok: false, reason: 'already_used' }
-  if (record.expiresAt < new Date()) return { ok: false, reason: 'expired' }
+        if (!record) return { ok: false, reason: 'not_found' as const }
+        if (record.purpose !== 'bank_connect') return { ok: false, reason: 'wrong_purpose' as const }
+        if (record.usedAt !== null) return { ok: false, reason: 'already_used' as const }
+        if (record.expiresAt < new Date()) return { ok: false, reason: 'expired' as const }
 
-  await prisma.onboardingToken.update({
-    where: { token },
-    data: { usedAt: new Date() },
-  })
+        await tx.onboardingToken.update({
+          where: { token },
+          data: { usedAt: new Date() },
+        })
 
-  return { ok: true, userId: record.userId }
+        return { ok: true, userId: record.userId }
+      },
+      { isolationLevel: 'Serializable' },
+    )
+  } catch {
+    // Serialization failure on concurrent request — treat as already used
+    return { ok: false, reason: 'already_used' }
+  }
 }

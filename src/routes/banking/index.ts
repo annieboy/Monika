@@ -24,9 +24,12 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   // ── GET /banking/connect ──────────────────────────────────────────────────
   /**
-   * Direct connection endpoint for internal/admin use.
-   * ?mock=true  — bypass OAuth, use MockOpenBankingProvider immediately.
-   * (no params) — returns a usage hint.
+   * Mock-only connection shortcut for local development and the e2e script.
+   * BLOCKED in production — returns 404 when NODE_ENV === 'production'.
+   *
+   * Security note: this endpoint bypasses OAuth entirely. It must never be
+   * reachable in production. The NODE_ENV guard is the enforcement mechanism;
+   * the Dockerfile also sets NODE_ENV=production.
    */
   app.get(
     '/connect',
@@ -45,6 +48,11 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       request: FastifyRequest<{ Querystring: ConnectQuery }>,
       reply: FastifyReply,
     ) => {
+      // Hard block in production — this endpoint must not exist outside dev
+      if (process.env['NODE_ENV'] === 'production') {
+        return reply.status(404).send({ error: 'Not Found' })
+      }
+
       const { userId, mock } = request.query
 
       if (mock === 'true') {

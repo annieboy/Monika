@@ -94,12 +94,15 @@ export async function sendWhatsAppMessage(
       return { waMessageId: wamid }
     }
 
-    const errorBody = await response.text()
+    // Read and truncate error body — avoid logging full Meta error responses
+    // which may contain rate-limit details or internal identifiers.
+    const rawError = await response.text()
+    const safeError = rawError.slice(0, 200)
 
     // 4xx errors are not retryable (bad request, auth failure, etc.)
     if (response.status >= 400 && response.status < 500) {
       throw new SendError(
-        `Meta API rejected message (${response.status}): ${errorBody}`,
+        `Meta API rejected message (${response.status})`,
         response.status,
         attempt + 1,
       )
@@ -107,7 +110,7 @@ export async function sendWhatsAppMessage(
 
     // 5xx — retryable
     lastError = new SendError(
-      `Meta API server error on attempt ${attempt + 1} (${response.status}): ${errorBody}`,
+      `Meta API server error on attempt ${attempt + 1} (${response.status}): ${safeError}`,
       response.status,
       attempt + 1,
     )

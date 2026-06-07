@@ -39,7 +39,7 @@ export async function processInboundMessage(
   text: string,
   wabaId: string,
 ): Promise<ProcessedMessage | null> {
-  const phoneHash = hashPhoneNumber(phone)
+  const phoneHash = hashPhoneNumber(phone, config.SECRET_KEY)
 
   // Deduplicate — Meta may deliver the same message more than once
   const existing = await prisma.conversation.findFirst({

@@ -1,18 +1,20 @@
 /**
  * POST /agent/chat
  *
- * HTTP interface for the message processor. Takes a userId + message,
- * runs the same classify→route→store pipeline as the WhatsApp webhook,
- * and returns the assistant response.
+ * HTTP interface for the message processor. Accepts userId + message, runs
+ * the classify→route→store pipeline, and returns the assistant response.
  *
- * In production this endpoint would sit behind authentication middleware.
- * For the MVP it accepts any userId so internal tools and the e2e script
- * can call it directly.
+ * Security: this endpoint is protected by HTTP Basic Auth (same credentials
+ * as the admin dashboard). It is intended for internal tooling and the e2e
+ * test script only — it must NOT be exposed as a public API.
+ *
+ * The WhatsApp webhook is the only public ingress for user messages.
  */
 import { randomUUID } from 'crypto'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { classifyIntent } from '../../services/agent/classifier.js'
 import { routeIntent } from '../../services/agent/router.js'
+import { requireAdminAuth } from '../admin/auth.js'
 import { config } from '../../config.js'
 
 interface ChatBody {
@@ -22,6 +24,12 @@ interface ChatBody {
 }
 
 const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
+  // Require admin credentials for every /agent/* request
+  app.addHook('onRequest', async (request, reply) => {
+    const ok = requireAdminAuth(request, reply)
+    if (!ok) return reply
+  })
+
   app.post<{ Body: ChatBody }>(
     '/chat',
     {

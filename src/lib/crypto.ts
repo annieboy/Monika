@@ -33,10 +33,20 @@ export function verifyHmacSignature(
 // ── Phone number hashing ───────────────────────────────────────────────────
 
 /**
- * Hashes a phone number with SHA-256.
+ * Hashes a phone number with HMAC-SHA256, keyed by SECRET_KEY.
+ *
+ * Using a keyed HMAC (vs bare SHA-256) prevents rainbow table attacks:
+ * an attacker who dumps the database cannot pre-compute hashes for common
+ * UK phone numbers without also knowing the application secret.
+ *
+ * Falls back to bare SHA-256 when SECRET_KEY is empty (dev/test only).
  * The raw phone number is NEVER stored — only this hash.
  */
-export function hashPhoneNumber(phone: string): string {
+export function hashPhoneNumber(phone: string, secretKey = ''): string {
+  if (secretKey) {
+    return createHmac('sha256', secretKey).update(phone).digest('hex')
+  }
+  // Dev/test fallback — deterministic but not secret-keyed
   return createHash('sha256').update(phone).digest('hex')
 }
 

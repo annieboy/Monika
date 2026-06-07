@@ -1,6 +1,7 @@
-import { createHash } from 'crypto'
 import type { PrismaClient } from '@prisma/client'
 import { layout, esc, fmtDate, badge, rowLink, paginate } from '../layout.js'
+import { hashPhoneNumber } from '../../../lib/crypto.js'
+import { config } from '../../../config.js'
 
 const PAGE_SIZE = 30
 
@@ -23,7 +24,7 @@ export async function usersListPage(prisma: PrismaClient, query: Record<string, 
   // If the user typed a phone number, hash it to search
   let phoneHash: string | undefined
   if (rawPhone.trim()) {
-    phoneHash = createHash('sha256').update(rawPhone.trim().replace(/\s+/g, '')).digest('hex')
+    phoneHash = hashPhoneNumber(rawPhone.trim().replace(/\s+/g, ''), config.SECRET_KEY)
   }
 
   const where = phoneHash

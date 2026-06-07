@@ -82,6 +82,11 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.post(
     '/whatsapp',
     {
+      config: {
+        // Meta delivers at most a few messages per second per WABA.
+        // 300/min allows bursts while preventing DoS from non-Meta senders.
+        rateLimit: { max: 300, timeWindow: '1 minute' },
+      },
       schema: {
         response: {
           200: { type: 'object', properties: { status: { type: 'string' } } },
@@ -103,6 +108,19 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       ) {
         request.log.warn({ path: request.url }, 'WhatsApp webhook signature verification failed')
         return reply.status(403).send({ error: 'Forbidden' })
+      }
+
+      // ── 1b. Replay protection — reject requests older than 5 minutes ───────
+      // Meta sends X-Hub-Timestamp (Unix seconds). Requests outside the window
+      // are either replayed captures or severely delayed deliveries.
+      const tsHeader = request.headers['x-hub-timestamp']
+      if (tsHeader) {
+        const tsSeconds = Number(tsHeader)
+        const ageMs = Date.now() - tsSeconds * 1000
+        if (Number.isFinite(tsSeconds) && (ageMs < -30_000 || ageMs > 5 * 60_000)) {
+          request.log.warn({ ageMs }, 'WhatsApp webhook timestamp outside acceptable window')
+          return reply.status(403).send({ error: 'Forbidden' })
+        }
       }
 
       // ── 2. Parse JSON body ─────────────────────────────────────────────────

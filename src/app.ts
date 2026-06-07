@@ -6,13 +6,15 @@
  *
  * Plugin registration order matters:
  *   1. Security (helmet, cors) — must wrap everything
- *   2. Infrastructure (prisma) — available to all routes
- *   3. Routes — registered last
+ *   2. Rate limiting — applied globally, overridden per-route where needed
+ *   3. Infrastructure (prisma) — available to all routes
+ *   4. Routes — registered last
  */
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import sensible from '@fastify/sensible'
+import rateLimit from '@fastify/rate-limit'
 import fp from 'fastify-plugin'
 import { config } from './config.js'
 import { logger } from './logger.js'
@@ -26,53 +28,64 @@ import devRoutes from './routes/dev/index.js'
 
 export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   const app = Fastify({
-    // Use our pre-configured Pino logger — Fastify will use this instance
-    // for all internal logging (request start, close, errors).
     loggerInstance: logger,
-    // Treat /foo and /foo/ as the same route — avoids 404 on missing trailing slash
     ignoreTrailingSlash: true,
-    // Trust the X-Forwarded-For header from load balancers in production
     trustProxy: config.NODE_ENV === 'production',
   })
 
   // ── Security ───────────────────────────────────────────────────────────────
   await app.register(helmet, {
-    // Disable contentSecurityPolicy for the API — we serve no HTML
     contentSecurityPolicy: false,
   })
 
   await app.register(cors, {
     origin:
       config.NODE_ENV === 'production'
-        ? ['https://app.monika.ai']  // restrict in production
-        : true,                      // allow all origins in development
+        ? ['https://app.monika.ai']
+        : true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 
+  // ── Rate limiting ──────────────────────────────────────────────────────────
+  // Global default: 100 requests / minute per IP.
+  // Tighter limits are applied per route via config.rateLimit.
+  await app.register(rateLimit, {
+    global: true,
+    max: 100,
+    timeWindow: '1 minute',
+    // In production, use the real client IP (after trustProxy header resolution).
+    // In test, key by a fixed string so tests don't hit limits.
+    keyGenerator: (request) =>
+      config.NODE_ENV === 'test'
+        ? 'test-key'
+        : (request.ip ?? 'unknown'),
+    errorResponseBuilder: (_request, context) => ({
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)}s.`,
+      retryAfter: Math.ceil(context.ttl / 1000),
+    }),
+  })
+
   // ── Utilities ──────────────────────────────────────────────────────────────
-  // @fastify/sensible adds httpErrors, assert, and other conveniences
   await app.register(sensible)
 
   // ── Infrastructure plugins ─────────────────────────────────────────────────
   await app.register(prismaPlugin)
 
-  // ── Request ID middleware ──────────────────────────────────────────────────
-  // Fastify generates a request ID per request by default (logged as reqId).
-  // Expose it as a response header so clients can correlate logs.
+  // ── Request ID propagation ─────────────────────────────────────────────────
   app.addHook('onSend', async (request, reply) => {
     void reply.header('X-Request-Id', request.id)
   })
 
   // ── Routes ─────────────────────────────────────────────────────────────────
-  await app.register(healthRoutes)                          // /health, /ready
-  await app.register(whatsappRoutes, { prefix: '/webhooks' }) // /webhooks/whatsapp
-  await app.register(bankingRoutes, { prefix: '/banking' })   // /banking/connect, /banking/callback
-  await app.register(agentRoutes, { prefix: '/agent' })       // /agent/chat
-  await app.register(adminRoutes, { prefix: '/admin' })       // /admin — internal dashboard
+  await app.register(healthRoutes)
+  await app.register(whatsappRoutes, { prefix: '/webhooks' })
+  await app.register(bankingRoutes, { prefix: '/banking' })
+  await app.register(agentRoutes, { prefix: '/agent' })
+  await app.register(adminRoutes, { prefix: '/admin' })
 
-  // Dev-only routes — never registered in production
   if (config.NODE_ENV !== 'production') {
-    await app.register(devRoutes, { prefix: '/dev' })          // /dev/simulate, /dev/status
+    await app.register(devRoutes, { prefix: '/dev' })
   }
 
   // ── 404 handler ────────────────────────────────────────────────────────────
@@ -85,13 +98,10 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   })
 
   // ── Global error handler ───────────────────────────────────────────────────
-  // Fastify passes FastifyError (which extends Error) to setErrorHandler.
-  // We use the typed FastifyError to access statusCode safely.
   app.setErrorHandler<Error>((err, request, reply) => {
     const fastifyErr = err as Error & { statusCode?: number }
     const statusCode = fastifyErr.statusCode ?? 500
 
-    // Log 5xx errors as errors, 4xx as warnings
     if (statusCode >= 500) {
       request.log.error({ err, statusCode }, 'Unhandled error')
     } else {
@@ -102,7 +112,7 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
       error: err.name ?? 'Internal Server Error',
       message:
         config.NODE_ENV === 'production' && statusCode >= 500
-          ? 'An internal error occurred' // never expose stack traces in production
+          ? 'An internal error occurred'
           : err.message,
       requestId: request.id,
     })
@@ -111,5 +121,4 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   return app
 }
 
-// fp re-export for when buildApp is used as a plugin in tests
 export { fp }

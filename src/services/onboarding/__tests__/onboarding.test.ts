@@ -48,7 +48,7 @@ function makeMockConnectionResult() {
 }
 
 function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
-  return {
+  const base: Record<string, unknown> = {
     onboardingToken: {
       create: vi.fn().mockResolvedValue({}),
       findUnique: vi.fn().mockResolvedValue(makeToken()),
@@ -72,7 +72,12 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       update: vi.fn().mockResolvedValue({}),
     },
     ...overrides,
-  } as unknown as PrismaClient
+  }
+  // $transaction: execute callback with the same mock (unit test — no real DB)
+  base['$transaction'] = vi.fn().mockImplementation(
+    async (cb: (tx: unknown) => Promise<unknown>) => cb(base as unknown as PrismaClient),
+  )
+  return base as unknown as PrismaClient
 }
 
 function makePrismaPlugin(prisma: PrismaClient) {

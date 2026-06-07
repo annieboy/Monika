@@ -186,6 +186,7 @@ async function main() {
       postJson<{ response: string; intent: string }>(
         '/agent/chat',
         { userId, message: 'connect my bank' },
+        adminAuthHeader(),
       ),
     (r) => {
       if (!r.response.includes('/banking/start?token='))
@@ -266,6 +267,7 @@ async function main() {
       postJson<{ response: string; intent: string }>(
         '/agent/chat',
         { userId, message: 'How much did I spend this month?' },
+        adminAuthHeader(),
       ),
     (r) => {
       if (r.response.toLowerCase().includes('connect'))
@@ -289,6 +291,7 @@ async function main() {
       postJson<{ response: string; intent: string }>(
         '/agent/chat',
         { userId, message: 'What subscriptions am I paying for?' },
+        adminAuthHeader(),
       ),
     (r) => {
       if (r.response.toLowerCase().includes('connect'))
@@ -310,6 +313,7 @@ async function main() {
       postJson<{ response: string; intent: string }>(
         '/agent/chat',
         { userId, message: "What's my balance?" },
+        adminAuthHeader(),
       ),
     (r) => {
       if (r.intent !== 'account_balance')

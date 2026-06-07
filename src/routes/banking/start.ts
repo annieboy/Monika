@@ -55,7 +55,7 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
               ? 'bank_connect_token_already_used'
               : 'bank_connect_token_not_found'
 
-        await logConsentEvent(prisma, auditEvent, null, { token: token.slice(0, 8) + '…' })
+        await logConsentEvent(prisma, auditEvent, null, { tokenLen: token.length })
         request.log.warn({ reason: validation.reason }, 'Bank connect token validation failed')
 
         const pageReason =
@@ -69,9 +69,7 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
 
       const { userId } = validation
-      await logConsentEvent(prisma, 'bank_connect_token_opened', userId, {
-        token: token.slice(0, 8) + '…',
-      })
+      await logConsentEvent(prisma, 'bank_connect_token_opened', userId, {})
 
       const provider = resolveProvider()
       const isTrueLayer = provider.providerName !== 'mock'
