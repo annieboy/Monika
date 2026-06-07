@@ -1,80 +1,53 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
 .venv/
-venv/
-env/
-ENV/
 *.egg-info/
-dist/
-build/
-.eggs/
-*.egg
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
 .coverage
-.coverage.*
-coverage.xml
-*.cover
 
-# ── Node / Next.js ────────────────────────────────────────────────────────────
-node_modules/
-.next/
-out/
-build/
-.turbo/
-*.tsbuildinfo
-
-# ── Environment files ────────────────────────────────────────────────────────
+# ── Environment ───────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
-.env.development.local
-.env.test.local
-.env.production.local
 
-# ── Docker ───────────────────────────────────────────────────────────────────
+# ── Docker ────────────────────────────────────────────────────────────────────
 docker-compose.override.yml
 
-# ── IDE ──────────────────────────────────────────────────────────────────────
+# ── Prisma ────────────────────────────────────────────────────────────────────
+# Generated client is rebuilt from schema — don't commit it
+# (uncomment if you want to commit generated types for CI without generate step)
+# prisma/generated/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
-*.swo
 *~
 
-# ── OS ───────────────────────────────────────────────────────────────────────
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# ── Keys and secrets ─────────────────────────────────────────────────────────
+# ── Keys ──────────────────────────────────────────────────────────────────────
 *.pem
 *.key
 *.p12
 *.pfx
-*.crt
-*.cer
-secrets/
 
-# ── Terraform ────────────────────────────────────────────────────────────────
-infrastructure/terraform/.terraform/
-infrastructure/terraform/*.tfstate
-infrastructure/terraform/*.tfstate.backup
-infrastructure/terraform/*.tfvars
-infrastructure/terraform/.terraform.lock.hcl
-
-# ── Misc ─────────────────────────────────────────────────────────────────────
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
-*.tmp
-*.bak
-.sass-cache/
+logs/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+.secrets.baseline
+coverage/

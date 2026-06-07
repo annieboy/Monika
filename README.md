@@ -2,112 +2,257 @@
 
 WhatsApp-native financial intelligence for UK consumers, built on Open Banking.
 
-## Documentation
+**Stack:** TypeScript · Node.js · Fastify · PostgreSQL · Prisma · Redis
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Full product and technical architecture
-- [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — Phase-by-phase build plan
+---
 
 ## Prerequisites
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Python | 3.11+ | [python.org](https://www.python.org/) or `asdf install` |
-| Node.js | 20+ | [nodejs.org](https://nodejs.org/) or `asdf install` |
-| uv | latest | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| Docker | 25+ | [docs.docker.com](https://docs.docker.com/get-docker/) |
+| Node.js | ≥ 20 | [nodejs.org](https://nodejs.org) |
+| npm | ≥ 10 | Bundled with Node.js |
+| Docker + Compose | ≥ 25 | [docs.docker.com](https://docs.docker.com/get-docker/) |
 
-## Quick Start
+---
+
+## Running Locally
+
+### 1. Clone and install
 
 ```bash
-# 1. Clone and set up
 git clone <repo-url> monika
 cd monika
-./scripts/setup.sh
-
-# 2. Fill in your API keys
-vi .env
-
-# 3. Apply database migrations
-./scripts/migrate.sh
-
-# 4. Start the backend
-uv run uvicorn backend.main:app --reload
+npm install
 ```
 
-## Local Services
-
-After `./scripts/setup.sh`:
-
-| Service    | URL                                          |
-|------------|----------------------------------------------|
-| PostgreSQL | `postgresql://monika:monika@localhost:5432/monika` |
-| Redis      | `redis://localhost:6379`                     |
-| Adminer    | http://localhost:8080                        |
-| Backend    | http://localhost:8000 (when running)         |
-| Frontend   | http://localhost:3000 (when running)         |
-
-## Development
+### 2. Start infrastructure
 
 ```bash
-# Run all tests
-uv run pytest
-
-# Run unit tests only (fast, no database required)
-uv run pytest backend/tests/unit/
-
-# Lint
-uv run ruff check backend/
-
-# Format
-uv run ruff format backend/
-
-# Type check
-uv run mypy backend/
-
-# Run all pre-commit hooks against staged files
-pre-commit run
-
-# Reset local database (destructive — prompts for confirmation)
-./scripts/reset-db.sh
+docker compose up -d
 ```
+
+This starts:
+- **PostgreSQL 16** on `localhost:5432`
+- **Redis 7** on `localhost:6379`
+- **Adminer** (database UI) on [localhost:8080](http://localhost:8080)
+
+Wait a few seconds for PostgreSQL to initialise, then verify:
+
+```bash
+docker compose ps           # all services should show "healthy"
+docker compose logs postgres --tail 5
+```
+
+### 3. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set the minimum values required to start:
+
+```env
+DATABASE_URL=postgresql://monika:monika@localhost:5432/monika
+SECRET_KEY=<any-string-at-least-32-chars>
+ENCRYPTION_KEY=<64-char-hex-string>   # openssl rand -hex 32
+```
+
+The following can be left blank until you implement those integrations:
+- `TRUELAYER_*` — needed for Open Banking (Task 6)
+- `ANTHROPIC_API_KEY` — needed for AI agent (Task 7)
+- `WHATSAPP_*` — needed for WhatsApp integration (Task 5)
+
+### 4. Apply database migrations
+
+```bash
+npm run db:migrate
+```
+
+This creates all tables, indexes, and enums. Prisma also regenerates the
+TypeScript client automatically.
+
+To inspect the database visually:
+
+```bash
+npm run db:studio     # opens Prisma Studio at localhost:5555
+# OR open Adminer at localhost:8080
+# Server: postgres, User: monika, Password: monika, Database: monika
+```
+
+### 5. Start the dev server
+
+```bash
+npm run dev
+```
+
+The server starts on [http://localhost:3000](http://localhost:3000).
+`tsx watch` hot-reloads on file changes — no restart needed during development.
+
+---
+
+## Verifying It Works
+
+Run these commands to verify each part of the system:
+
+```bash
+# Liveness check — is the server alive?
+curl http://localhost:3000/health
+
+# Readiness check — is the database connected?
+curl http://localhost:3000/ready
+
+# WhatsApp webhook verification (Meta calls this during setup)
+curl "http://localhost:3000/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=&hub.challenge=ping"
+# → 403 (expected — WHATSAPP_VERIFY_TOKEN not set)
+
+# WhatsApp inbound message (stub — not yet processing)
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{"entry":[]}'
+# → HTTP 200
+
+# Open Banking connect (stub)
+curl http://localhost:3000/banking/connect
+# → {"stub":true, ...}
+
+# AI agent chat (stub)
+curl -X POST http://localhost:3000/agent/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"How much did I spend on groceries?"}'
+# → {"stub":true, "echo":"How much did I spend on groceries?", ...}
+```
+
+Expected `/health` response:
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "startedAt": "2026-06-07T...",
+  "uptime": 3
+}
+```
+
+Expected `/ready` response (database connected):
+```json
+{
+  "status": "ok",
+  "checks": {
+    "database": { "ok": true, "latencyMs": 4 }
+  }
+}
+```
+
+---
 
 ## Project Structure
 
 ```
 monika/
-├── backend/             # Python backend (FastAPI)
-│   ├── core/            # Shared utilities: config, logging, exceptions
-│   ├── api/             # HTTP endpoints and middleware
-│   ├── services/        # Business logic
-│   ├── workers/         # Background job processors
-│   ├── db/              # Database models and migrations
-│   └── tests/           # Unit and integration tests
-├── frontend/            # Next.js web onboarding flow
-├── infrastructure/      # Docker Compose and Terraform
-├── scripts/             # Developer utility scripts
-├── alembic/             # Database migrations
-└── docs/                # Architecture and planning documents
+├── src/
+│   ├── index.ts              # Server entry point — starts Fastify, handles shutdown
+│   ├── app.ts                # App factory — registers plugins and routes
+│   ├── config.ts             # Env config validated with Zod (fails fast on startup)
+│   ├── logger.ts             # Pino logger — pretty in dev, JSON in production
+│   ├── lib/
+│   │   └── prisma.ts         # PrismaClient singleton
+│   ├── plugins/
+│   │   └── prisma.ts         # Fastify plugin — attaches prisma to app instance
+│   └── routes/
+│       ├── health.ts         # GET /health (liveness), GET /ready (readiness)
+│       ├── webhooks/
+│       │   └── whatsapp.ts   # POST /webhooks/whatsapp — stub, Task 5.1
+│       ├── banking/
+│       │   └── index.ts      # /banking/connect, /banking/callback — stub, Task 6.2
+│       └── agent/
+│           └── index.ts      # POST /agent/chat — stub, Task 7.1
+├── prisma/
+│   ├── schema.prisma         # Full database schema (9 models, 12 enums)
+│   ├── migrations/           # Generated SQL migrations (committed to git)
+│   └── seed.ts               # Database seeder (placeholder)
+├── scripts/
+│   ├── setup.sh              # One-shot setup for fresh clones
+│   └── reset-db.sh           # Wipe and recreate local database
+├── docs/
+│   ├── ARCHITECTURE.md       # Full product and technical architecture
+│   └── IMPLEMENTATION_PLAN.md # Phase-by-phase build plan (35 tasks)
+├── docker-compose.yml        # PostgreSQL, Redis, Adminer
+├── .env.example              # All environment variables documented
+├── package.json
+├── tsconfig.json
+└── .eslintrc.json
 ```
 
-## Environment Variables
+---
 
-Copy `.env.example` to `.env` and configure:
+## Available Scripts
 
-```bash
-cp .env.example .env
-# Then edit .env with your API keys
-```
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server with hot-reload (tsx watch) |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run compiled server (`node dist/index.js`) |
+| `npm run typecheck` | Type-check without emitting files |
+| `npm run lint` | ESLint — zero warnings policy |
+| `npm run lint:fix` | ESLint auto-fix |
+| `npm run format` | Prettier format |
+| `npm run db:migrate` | Apply pending migrations |
+| `npm run db:migrate:deploy` | Apply migrations (CI/production — no interactive prompt) |
+| `npm run db:studio` | Open Prisma Studio GUI |
+| `npm run db:seed` | Seed development data |
+| `./scripts/reset-db.sh` | Wipe and recreate local database (confirms before running) |
 
-Required for basic startup:
-- `SECRET_KEY` — 64-char hex: `openssl rand -hex 32`
-- `ENCRYPTION_KEY` — 64-char hex: `openssl rand -hex 32`
+---
 
-Required for full functionality: TrueLayer, Anthropic, and WhatsApp credentials (see `.env.example`).
+## Database Schema
 
-## Contributing
+Nine models covering the full domain:
 
-1. Branch from `main`
-2. `pre-commit install` to enable commit hooks
-3. All tests must pass: `uv run pytest`
-4. All linting must pass: `uv run ruff check backend/`
-5. Type check must pass: `uv run mypy backend/`
+| Model | Description |
+|-------|-------------|
+| `User` | Core user record — phone stored as SHA-256 hash only |
+| `BankConnection` | TrueLayer/Yapily OAuth consent — tokens encrypted at rest |
+| `Account` | Individual bank accounts within a connection |
+| `Transaction` | All transactions — categorised, enriched, deduplicated |
+| `Conversation` | Chat history with the AI agent, including tool calls |
+| `MonthlySummary` | Pre-computed monthly aggregations (nightly refresh) |
+| `RecurringPayment` | Detected subscriptions and regular payments |
+| `AuditLog` | Immutable audit trail — BigInt ID for ordering guarantees |
+| `OnboardingToken` | Short-lived (15min), single-use tokens for bank connection flow |
+
+Encrypted fields (`*Enc`) store ciphertext as `BYTEA`. Encryption/decryption
+happens at the application layer — a database compromise exposes ciphertext,
+not PII.
+
+---
+
+## Architecture Decisions
+
+**Fastify over Express:** Native TypeScript types, built-in Pino logging, ~2x
+throughput, and a plugin system that cleanly separates infrastructure concerns
+from route handlers.
+
+**Prisma over raw SQL / Drizzle:** Schema-first approach generates correct
+TypeScript types for every query. Migration history is committed as SQL files
+so the database state is always reproducible.
+
+**Pino over Winston / Morgan:** Lowest latency JSON logging, native Fastify
+integration, and configurable redaction for sensitive fields.
+
+**Zod for config:** Fails immediately at startup with a list of every missing
+or invalid variable. No mysterious `undefined` errors at runtime.
+
+**`dotenv` in `config.ts`:** Calling `dotenvConfig()` in the config module
+ensures `.env` is loaded before Zod validates `process.env`, regardless of
+import order.
+
+---
+
+## Next Steps
+
+See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full
+task breakdown. Upcoming tasks:
+
+1. **Task 5.1** — WhatsApp webhook: HMAC signature verification, message parsing
+2. **Task 6.1** — TrueLayer client: OAuth flow, token exchange
+3. **Task 7.1** — AI agent: Anthropic SDK, tool-calling loop

@@ -1,0 +1,434 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Monika — Prisma Schema
+// PostgreSQL with UUID primary keys and encrypted PII fields (stored as Bytes).
+// Run `npm run db:generate` after changes.
+// Run `npm run db:migrate` to apply to local database.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum OnboardingStatus {
+  pending
+  connecting
+  active
+  suspended
+  deleted
+}
+
+enum Provider {
+  truelayer
+  yapily
+}
+
+enum ConsentStatus {
+  active
+  expired
+  revoked
+  error
+}
+
+enum AccountType {
+  current
+  savings
+  credit_card
+  mortgage
+  loan
+  pension
+}
+
+enum TransactionType {
+  debit
+  credit
+  transfer
+}
+
+enum TransactionStatus {
+  pending
+  settled
+  declined
+}
+
+enum CategoryMethod {
+  rule
+  ml
+  llm
+  user_override
+}
+
+enum ConversationRole {
+  user
+  assistant
+  tool
+}
+
+enum RecurringFrequency {
+  weekly
+  monthly
+  quarterly
+  annual
+  irregular
+}
+
+enum RecurringStatus {
+  active
+  cancelled
+  paused
+}
+
+enum TokenPurpose {
+  bank_connect
+  email_verify
+  account_delete
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // WhatsApp identity — phone is stored only as a SHA-256 hash
+  whatsappPhoneHash String @unique @map("whatsapp_phone_hash") @db.VarChar(64)
+  whatsappWabaId    String @map("whatsapp_waba_id") @db.VarChar(64)
+
+  // Encrypted PII — AES-256-GCM, application-layer encryption
+  fullNameEnc Bytes? @map("full_name_enc")
+  emailEnc    Bytes? @map("email_enc")
+
+  // Onboarding state
+  onboardingStatus OnboardingStatus @default(pending) @map("onboarding_status")
+
+  // Compliance
+  termsAcceptedAt DateTime? @map("terms_accepted_at") @db.Timestamptz()
+  termsVersion    String?   @map("terms_version") @db.VarChar(16)
+  gdprConsentAt   DateTime? @map("gdpr_consent_at") @db.Timestamptz()
+  marketingConsent Boolean  @default(false) @map("marketing_consent")
+
+  // FCA / AML
+  identityVerified Boolean @default(false) @map("identity_verified")
+  riskScore        Int     @default(0) @map("risk_score") @db.SmallInt
+
+  // Soft delete (GDPR right to erasure)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+
+  // Relations
+  bankConnections  BankConnection[]
+  accounts         Account[]
+  transactions     Transaction[]
+  conversations    Conversation[]
+  monthlySummaries MonthlySummary[]
+  recurringPayments RecurringPayment[]
+  auditLogs        AuditLog[]
+  onboardingTokens OnboardingToken[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANK CONNECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BankConnection {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Provider details
+  provider          Provider
+  providerConsentId String   @map("provider_consent_id") @db.VarChar(255)
+  bankId            String   @map("bank_id") @db.VarChar(64)
+  bankDisplayName   String   @map("bank_display_name") @db.VarChar(128)
+  bankLogoUrl       String?  @map("bank_logo_url") @db.VarChar(512)
+
+  // OAuth tokens — encrypted at rest (AES-256-GCM)
+  accessTokenEnc  Bytes  @map("access_token_enc")
+  refreshTokenEnc Bytes? @map("refresh_token_enc")
+  tokenExpiresAt  DateTime? @map("token_expires_at") @db.Timestamptz()
+
+  // Consent state
+  consentStatus    ConsentStatus @default(active) @map("consent_status")
+  consentExpiresAt DateTime?     @map("consent_expires_at") @db.Timestamptz()
+  consentScopes    String[]      @map("consent_scopes")
+
+  // Sync state
+  lastSyncAt     DateTime? @map("last_sync_at") @db.Timestamptz()
+  lastSyncStatus String?   @map("last_sync_status") @db.VarChar(32)
+  lastSyncError  String?   @map("last_sync_error")
+  syncCursor     String?   @map("sync_cursor") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  accounts Account[]
+
+  @@unique([userId, providerConsentId])
+  @@index([consentStatus])
+  @@map("bank_connections")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Account {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  connectionId String         @map("connection_id") @db.Uuid
+  connection   BankConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  providerAccountId String      @map("provider_account_id") @db.VarChar(255)
+  accountType       AccountType @map("account_type")
+  displayName       String?     @map("display_name") @db.VarChar(128)
+  currency          String      @default("GBP") @db.Char(3)
+
+  // Balance snapshot (not authoritative — updated on each sync)
+  currentBalance   Decimal?  @map("current_balance") @db.Decimal(15, 2)
+  availableBalance Decimal?  @map("available_balance") @db.Decimal(15, 2)
+  creditLimit      Decimal?  @map("credit_limit") @db.Decimal(15, 2)
+  balanceUpdatedAt DateTime? @map("balance_updated_at") @db.Timestamptz()
+
+  // Account metadata — encrypted PII
+  accountNumberEnc Bytes?  @map("account_number_enc")
+  sortCodeEnc      Bytes?  @map("sort_code_enc")
+  accountLast4     String? @map("account_last4") @db.Char(4)
+
+  isPrimary Boolean @default(false) @map("is_primary")
+  isActive  Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  transactions Transaction[]
+
+  @@unique([connectionId, providerAccountId])
+  @@index([userId, isActive])
+  @@map("accounts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSACTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Transaction {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  accountId String  @map("account_id") @db.Uuid
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Provider data
+  providerTransactionId String @map("provider_transaction_id") @db.VarChar(255)
+  providerRawData       Json?  @map("provider_raw_data")
+
+  // Core fields
+  amount          Decimal           @db.Decimal(15, 2) // negative = debit
+  currency        String            @default("GBP") @db.Char(3)
+  transactionType TransactionType   @map("transaction_type")
+  status          TransactionStatus @default(settled)
+
+  // Merchant
+  merchantName         String? @map("merchant_name") @db.VarChar(255)
+  merchantNameClean    String? @map("merchant_name_clean") @db.VarChar(255)
+  merchantCategoryCode String? @map("merchant_category_code") @db.VarChar(8)
+  merchantLogoUrl      String? @map("merchant_logo_url") @db.VarChar(512)
+
+  // Dates
+  transactionDate DateTime @map("transaction_date") @db.Date
+  valueDate       DateTime? @map("value_date") @db.Date
+
+  // Categorisation
+  category           String?        @db.VarChar(64)
+  categoryConfidence Decimal?       @map("category_confidence") @db.Decimal(4, 3)
+  categoryMethod     CategoryMethod? @map("category_method")
+  subcategory        String?        @db.VarChar(64)
+
+  // Description
+  rawDescription   String? @map("raw_description") @db.VarChar(500)
+  cleanDescription String? @map("clean_description") @db.VarChar(255)
+
+  // Enrichment flags
+  isRecurring       Boolean @default(false) @map("is_recurring")
+  isSubscription    Boolean @default(false) @map("is_subscription")
+  subscriptionName  String? @map("subscription_name") @db.VarChar(128)
+  isInternalTransfer Boolean @default(false) @map("is_internal_transfer")
+  isRefund          Boolean @default(false) @map("is_refund")
+  isSalary          Boolean @default(false) @map("is_salary")
+  anomalyScore      Decimal @default(0) @map("anomaly_score") @db.Decimal(4, 3)
+
+  // Deduplication — SHA-256(account_id:date:amount:description)
+  dedupHash String @map("dedup_hash") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([accountId, providerTransactionId])
+  @@unique([accountId, dedupHash])
+  @@index([userId, transactionDate(sort: Desc)])
+  @@index([userId, category, transactionDate(sort: Desc)])
+  @@index([userId, merchantNameClean])
+  @@index([userId, isSubscription])
+  @@index([userId, anomalyScore(sort: Desc)])
+  @@map("transactions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Conversation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Groups messages into sessions (new session after 2h inactivity)
+  sessionId String @map("session_id") @db.Uuid
+
+  // Message
+  role          ConversationRole
+  content       String
+  contentTokens Int?             @map("content_tokens")
+
+  // Agent metadata
+  toolCalls   Json?   @map("tool_calls")
+  toolResults Json?   @map("tool_results")
+  modelUsed   String? @map("model_used") @db.VarChar(64)
+  latencyMs   Int?    @map("latency_ms")
+
+  // WhatsApp tracking
+  waMessageId String? @map("wa_message_id") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, sessionId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTHLY SUMMARIES (pre-computed, refreshed nightly)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MonthlySummary {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  yearMonth String @map("year_month") @db.Char(7) // 'YYYY-MM'
+
+  totalSpend  Decimal? @map("total_spend") @db.Decimal(15, 2)
+  totalIncome Decimal? @map("total_income") @db.Decimal(15, 2)
+  net         Decimal? @db.Decimal(15, 2)
+
+  // e.g. { "groceries": 245.67, "dining": 387.40 }
+  spendByCategory Json? @map("spend_by_category")
+
+  transactionCount Int? @map("transaction_count")
+  computedAt       DateTime @default(now()) @map("computed_at") @db.Timestamptz()
+
+  @@unique([userId, yearMonth])
+  @@index([userId, yearMonth(sort: Desc)])
+  @@map("monthly_summaries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECURRING PAYMENTS (detected subscriptions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RecurringPayment {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  merchantName    String  @map("merchant_name") @db.VarChar(255)
+  typicalAmount   Decimal @map("typical_amount") @db.Decimal(15, 2)
+  amountVariance  Decimal? @map("amount_variance") @db.Decimal(15, 2)
+
+  frequency          RecurringFrequency
+  nextExpectedDate   DateTime?          @map("next_expected_date") @db.Date
+
+  firstSeenDate   DateTime @map("first_seen_date") @db.Date
+  lastSeenDate    DateTime @map("last_seen_date") @db.Date
+  occurrenceCount Int      @default(1) @map("occurrence_count")
+
+  isConfirmed Boolean  @default(false) @map("is_confirmed")
+  userLabel   String?  @map("user_label") @db.VarChar(128)
+  status      RecurringStatus @default(active)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([userId, status])
+  @@map("recurring_payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG (immutable — append only, never update or delete)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  // BigInt auto-increment, not UUID — makes ordering unambiguous
+  id BigInt @id @default(autoincrement())
+
+  userId String? @map("user_id") @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id])
+
+  eventType String @map("event_type") @db.VarChar(64)
+  eventData Json?  @map("event_data")
+
+  // Request context — IP stored as SHA-256 hash, not plaintext
+  ipAddressHash String? @map("ip_address_hash") @db.VarChar(64)
+  userAgent     String? @map("user_agent") @db.VarChar(255)
+  requestId     String? @map("request_id") @db.VarChar(64)
+  serviceName   String? @map("service_name") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ONBOARDING TOKENS (short-lived, single-use)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OnboardingToken {
+  token String @id @db.VarChar(64) // cryptographically random, 256-bit
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose   TokenPurpose
+  expiresAt DateTime     @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime?    @map("used_at") @db.Timestamptz()
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId])
+  @@map("onboarding_tokens")
+}
