@@ -66,9 +66,9 @@ export async function processInboundMessage(
     select: { id: true },
   })
 
-  // Classify and route
+  // Classify and route — routeIntent queries live transaction data for data-driven intents
   const classification = await classifyIntent(text, config.ANTHROPIC_API_KEY)
-  const response = routeIntent(classification.intent, text)
+  const response = await routeIntent(classification.intent, text, user.id, prisma, config.ANTHROPIC_API_KEY)
 
   // Store assistant reply in the same session, with intent in toolCalls metadata
   const assistantConversation = await prisma.conversation.create({

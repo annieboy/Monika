@@ -1,5 +1,25 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { Decimal } from '@prisma/client/runtime/library'
+import type { PrismaClient } from '@prisma/client'
 import { routeIntent, isPaymentRequest, PAYMENT_REJECTION } from '../router.js'
+
+// Minimal Prisma mock — connected by default, no transactions
+function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
+  return {
+    bankConnection: { findFirst: vi.fn().mockResolvedValue({ id: 'conn-id' }) },
+    transaction: {
+      groupBy: vi.fn().mockResolvedValue([]),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: null } }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    account: { findMany: vi.fn().mockResolvedValue([]) },
+    ...overrides,
+  } as unknown as PrismaClient
+}
+
+const USER_ID = 'user-uuid'
+
+// ── isPaymentRequest ───────────────────────────────────────────────────────
 
 describe('isPaymentRequest', () => {
   it('detects "pay to" phrasing', () => {
@@ -27,38 +47,106 @@ describe('isPaymentRequest', () => {
   })
 })
 
+// ── Payment rejection ──────────────────────────────────────────────────────
+
 describe('routeIntent — payment rejection overrides intent', () => {
-  it('rejects payment request even if intent is spending_analysis', () => {
-    const response = routeIntent('spending_analysis', 'Pay £100 to John')
+  it('rejects payment request even if intent is spending_analysis', async () => {
+    const response = await routeIntent('spending_analysis', 'Pay £100 to John', USER_ID, makePrisma())
     expect(response).toBe(PAYMENT_REJECTION)
   })
 
-  it('rejects transfer request', () => {
-    const response = routeIntent('unknown', 'Transfer £500 to my savings account')
+  it('rejects transfer request', async () => {
+    const response = await routeIntent('unknown', 'Transfer £500 to my savings account', USER_ID, makePrisma())
     expect(response).toBe(PAYMENT_REJECTION)
   })
 })
 
-describe('routeIntent — stub responses per intent', () => {
-  const cases: Array<[Parameters<typeof routeIntent>[0], string]> = [
-    ['spending_analysis', 'How much did I spend?'],
-    ['subscription_detection', 'What subscriptions do I have?'],
-    ['affordability_question', 'Can I afford this?'],
-    ['unusual_spending', 'Any weird spending?'],
-    ['account_balance', "What's my balance?"],
-    ['onboarding_help', 'Help me get started'],
-    ['unknown', 'gibberish input'],
-  ]
+// ── Static/non-data intents ────────────────────────────────────────────────
 
-  for (const [intent, message] of cases) {
-    it(`returns a non-empty string for intent "${intent}"`, () => {
-      const response = routeIntent(intent, message)
-      expect(typeof response).toBe('string')
-      expect(response.length).toBeGreaterThan(10)
-      expect(response).not.toBe(PAYMENT_REJECTION)
+describe('routeIntent — static responses', () => {
+  it('returns onboarding help message', async () => {
+    const response = await routeIntent('onboarding_help', 'Help me get started', USER_ID, makePrisma())
+    expect(response.length).toBeGreaterThan(10)
+    expect(response).not.toBe(PAYMENT_REJECTION)
+  })
+
+  it('returns affordability message', async () => {
+    const response = await routeIntent('affordability_question', 'Can I afford this?', USER_ID, makePrisma())
+    expect(response.length).toBeGreaterThan(10)
+  })
+
+  it('returns unknown intent message', async () => {
+    const response = await routeIntent('unknown', 'gibberish input', USER_ID, makePrisma())
+    expect(response.length).toBeGreaterThan(10)
+  })
+})
+
+// ── Data-driven intents with connected bank ────────────────────────────────
+
+describe('routeIntent — data-driven intents', () => {
+  it('spending_analysis returns a non-empty string with connected bank', async () => {
+    const response = await routeIntent('spending_analysis', 'How much did I spend?', USER_ID, makePrisma())
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(10)
+  })
+
+  it('subscription_detection returns a non-empty string', async () => {
+    const response = await routeIntent('subscription_detection', 'What subscriptions?', USER_ID, makePrisma())
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(10)
+  })
+
+  it('unusual_spending returns "nothing unusual" when no anomalies', async () => {
+    const response = await routeIntent('unusual_spending', 'Any weird spending?', USER_ID, makePrisma())
+    expect(response.toLowerCase()).toContain('normal')
+  })
+
+  it('account_balance returns "no accounts found" when no accounts', async () => {
+    const response = await routeIntent('account_balance', "What's my balance?", USER_ID, makePrisma())
+    expect(response.toLowerCase()).toContain('account')
+  })
+
+  it('account_balance includes the amount when accounts exist', async () => {
+    const prisma = makePrisma({
+      account: {
+        findMany: vi.fn().mockResolvedValue([
+          { displayName: 'Current', accountType: 'current', currentBalance: new Decimal('1234.56'), availableBalance: null, isPrimary: true },
+        ]),
+      },
     })
-  }
+    const response = await routeIntent('account_balance', "What's my balance?", USER_ID, prisma)
+    expect(response).toContain('1234.56')
+  })
 })
+
+// ── No bank connection ─────────────────────────────────────────────────────
+
+describe('routeIntent — no bank connection', () => {
+  const disconnectedPrisma = () =>
+    makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+
+  it('spending_analysis prompts to connect bank', async () => {
+    const response = await routeIntent('spending_analysis', 'How much did I spend?', USER_ID, disconnectedPrisma())
+    expect(response.toLowerCase()).toContain('connect')
+  })
+
+  it('subscription_detection prompts to connect bank', async () => {
+    const response = await routeIntent('subscription_detection', 'What subscriptions?', USER_ID, disconnectedPrisma())
+    expect(response.toLowerCase()).toContain('connect')
+  })
+
+  it('unusual_spending prompts to connect bank', async () => {
+    const response = await routeIntent('unusual_spending', 'Show weird spending', USER_ID, disconnectedPrisma())
+    expect(response.toLowerCase()).toContain('connect')
+  })
+
+  it('account_balance prompts to connect bank', async () => {
+    const response = await routeIntent('account_balance', "What's my balance?", USER_ID, disconnectedPrisma())
+    expect(response.toLowerCase()).toContain('connect')
+  })
+})
+
+// ── PAYMENT_REJECTION constant ─────────────────────────────────────────────
 
 describe('PAYMENT_REJECTION constant', () => {
   it('contains the exact required phrase', () => {
