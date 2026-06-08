@@ -2,8 +2,10 @@ export const INTENTS = [
   'spending_analysis',
   'subscription_detection',
   'affordability_question',
+  'safe_to_spend',
   'unusual_spending',
   'account_balance',
+  'payment_request',
   'onboarding_help',
   'unknown',
 ] as const

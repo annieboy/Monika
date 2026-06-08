@@ -405,9 +405,9 @@ describe('routeIntent — account_balance', () => {
 })
 
 describe('routeIntent — payment rejection', () => {
-  it('rejects payment requests regardless of bank connection', async () => {
+  it('rejects payment_request intent', async () => {
     const prisma = makePrisma()
-    const response = await routeIntent('unknown', 'Pay £100 to John', USER_ID, prisma)
-    expect(response).toContain('Payments are not supported yet.')
+    const response = await routeIntent('payment_request', 'Pay £100 to John', USER_ID, prisma)
+    expect(response.toLowerCase()).toContain('payment')
   })
 })

@@ -7,6 +7,8 @@ import {
   formatSubscriptions,
   formatUnusualSpending,
   formatAccountBalances,
+  formatAffordability,
+  formatSafeToSpend,
   polishWithLlm,
 } from '../analytics/formatter.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
@@ -14,25 +16,8 @@ import { logConsentEvent } from '../onboarding/audit.js'
 import { trackEvent } from '../analytics/events.js'
 import { config } from '../../config.js'
 
-// ── Payment guard ──────────────────────────────────────────────────────────
-
-const PAYMENT_PATTERNS = [
-  /\bpay\b.*\bto\b/i,
-  /\btransfer\b/i,
-  /\bsend\s+(money|funds|\£|\$)/i,
-  /\bmake\s+a\s+payment/i,
-  /\bpay\s+(someone|a\s+bill|my\s+rent|my\s+mortgage)/i,
-  /\bset\s+up\s+(a\s+)?payment/i,
-  /\bbank\s+transfer\b/i,
-  /\bpay\s+\£\d/i,
-]
-
-export function isPaymentRequest(message: string): boolean {
-  return PAYMENT_PATTERNS.some((p) => p.test(message))
-}
-
 export const PAYMENT_REJECTION =
-  'Payments are not supported yet. Monika is a read-only finance assistant — I can show you your money, but I cannot move it.'
+  `Payments aren't available yet — that's coming soon. Right now I can help you understand your money: spending, balances, subscriptions, and whether you can afford something.`
 
 // ── Bank connection link ───────────────────────────────────────────────────
 
@@ -66,13 +51,10 @@ async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<s
 // ── Static responses ───────────────────────────────────────────────────────
 
 const STATIC_ONBOARDING =
-  "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or unusual transactions. To get started, say \"connect my bank\"."
-
-const STATIC_AFFORDABILITY =
-  "To answer affordability questions I need to see your income and outgoings. Ask me \"What's my balance?\" or \"How much have I spent this month?\" to help you decide."
+  "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or whether you can afford something. To get started, say \"connect my bank\"."
 
 const STATIC_UNKNOWN =
-  "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"What subscriptions am I paying for?\", or \"What's my balance?\""
+  "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"Can I afford a £400k mortgage?\", \"How much can I safely spend this weekend?\", or \"What's my balance?\""
 
 // ── Main router ────────────────────────────────────────────────────────────
 
@@ -83,30 +65,26 @@ export async function routeIntent(
   prisma: PrismaClient,
   anthropicApiKey = '',
 ): Promise<string> {
-  // Payment requests blocked unconditionally
-  if (isPaymentRequest(message)) return PAYMENT_REJECTION
+  // Payment requests — not yet supported
+  if (intent === 'payment_request') return PAYMENT_REJECTION
 
   const analytics = new TransactionAnalyticsService(prisma)
 
   // ── onboarding_help ────────────────────────────────────────────────────
   if (intent === 'onboarding_help') {
-    // "connect my bank" → generate a personalised link
     if (isConnectBankRequest(message)) {
       const alreadyConnected = await analytics.hasActiveBankConnection(userId)
       if (alreadyConnected) {
-        return "Your bank is already connected. You can ask me about your spending, subscriptions, or balance."
+        return "Your bank is already connected. You can ask me about your spending, subscriptions, balance, or whether you can afford something."
       }
       return buildConnectLink(prisma, userId)
     }
     return STATIC_ONBOARDING
   }
 
-  // ── Static non-data intents ─────────────────────────────────────────────
-  if (intent === 'affordability_question') return STATIC_AFFORDABILITY
   if (intent === 'unknown') return STATIC_UNKNOWN
 
   // ── Data-driven intents ─────────────────────────────────────────────────
-  // All require an active bank connection; missing connection → generate link
   if (!(await analytics.hasActiveBankConnection(userId))) {
     return buildConnectLink(prisma, userId)
   }
@@ -141,6 +119,20 @@ export async function routeIntent(
     case 'account_balance': {
       const balances = await analytics.getAccountBalances(userId)
       structuredText = formatAccountBalances(balances)
+      break
+    }
+
+    case 'affordability_question': {
+      const profile = await analytics.getAffordabilityProfile(userId)
+      structuredText = formatAffordability(profile, message)
+      break
+    }
+
+    case 'safe_to_spend': {
+      // Detect period from message: weekend=2 days, week=7, default=3
+      const days = /week\b/i.test(message) && !/weekend/i.test(message) ? 7 : /month/i.test(message) ? 30 : 3
+      const data = await analytics.getSafeToSpend(userId, days)
+      structuredText = formatSafeToSpend(data)
       break
     }
 

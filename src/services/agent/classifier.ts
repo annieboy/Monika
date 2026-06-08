@@ -24,15 +24,41 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'payment_request',
+    patterns: [
+      /\bpay\b.*\bto\b/i,
+      /\btransfer\b/i,
+      /\bsend\s+(money|funds|£|\$)/i,
+      /\bmake\s+a\s+payment/i,
+      /\bpay\s+(someone|a\s+bill|my\s+rent|my\s+mortgage)/i,
+      /\bset\s+up\s+(a\s+)?payment/i,
+      /\bbank\s+transfer\b/i,
+      /\bpay\s+£\d/i,
+    ],
+  },
+  {
+    intent: 'safe_to_spend',
+    patterns: [
+      /safe\s+to\s+spend/i,
+      /how\s+much\s+can\s+i\s+spend/i,
+      /can\s+i\s+spend/i,
+      /spend\s+this\s+(weekend|week|month)/i,
+      /this\s+weekend/i,
+      /spare\s+(cash|money)/i,
+      /left\s+to\s+spend/i,
+      /spending\s+money/i,
+    ],
+  },
+  {
     intent: 'affordability_question',
     patterns: [
       /can\s+i\s+afford/i,
       /afford/i,
+      /mortgage/i,
       /will\s+i\s+(have|be\s+able)/i,
       /have\s+enough/i,
       /budget\s+(for|next)/i,
       /next\s+month.*can\s+i/i,
-      /is\s+it\s+safe\s+to\s+spend/i,
     ],
   },
   {

@@ -37,6 +37,25 @@ export interface AccountBalance {
   availableBalance: number | null
 }
 
+export interface AffordabilityProfile {
+  monthlyIncome: number
+  monthlyEssentials: number       // rent, utilities, groceries, transport
+  monthlySubscriptions: number
+  monthlyDiscretionary: number    // everything else
+  totalMonthlyCommitted: number   // essentials + subscriptions
+  disposableIncome: number        // income - committed
+  savingsRate: number | null      // % of income saved (if detectable)
+  currentBalance: number          // sum of current account balances
+}
+
+export interface SafeToSpend {
+  currentBalance: number
+  committedThisPeriod: number     // bills/DDs due before end of period
+  safeAmount: number
+  periodLabel: string
+  warningFlags: string[]
+}
+
 export interface MonthlyComparison {
   thisMonth: number
   lastMonth: number
@@ -282,6 +301,135 @@ export class TransactionAnalyticsService {
     }
 
     return Array.from(flagged.values()).sort((a, b) => a.amount - b.amount) // most negative first
+  }
+
+  /**
+   * Builds a financial profile for affordability analysis.
+   * Uses the last 3 months of transactions for stable averages.
+   */
+  async getAffordabilityProfile(userId: string): Promise<AffordabilityProfile> {
+    const now = new Date()
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
+
+    const ESSENTIAL_CATEGORIES = ['rent', 'mortgage', 'utilities', 'groceries', 'transport', 'insurance', 'council_tax']
+
+    const [incomeAgg, essentialsAgg, subsAgg, allSpendAgg, accounts] = await Promise.all([
+      // Income: positive transactions flagged as salary or large credits
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { gt: 0 }, isSalary: true },
+        _sum: { amount: true },
+      }),
+      // Essentials
+      this.prisma.transaction.aggregate({
+        where: {
+          userId,
+          transactionDate: { gte: threeMonthsAgo },
+          amount: { lt: 0 },
+          isSalary: false,
+          category: { in: ESSENTIAL_CATEGORIES },
+        },
+        _sum: { amount: true },
+      }),
+      // Subscriptions
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { lt: 0 }, isSubscription: true },
+        _sum: { amount: true },
+      }),
+      // All spend
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { lt: 0 }, isSalary: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.account.findMany({
+        where: { userId, isActive: true },
+        select: { currentBalance: true, accountType: true },
+      }),
+    ])
+
+    const monthlyIncome = Math.abs((incomeAgg._sum.amount ?? new Decimal(0)).toNumber()) / 3
+    const monthlyEssentials = Math.abs((essentialsAgg._sum.amount ?? new Decimal(0)).toNumber()) / 3
+    const monthlySubscriptions = Math.abs((subsAgg._sum.amount ?? new Decimal(0)).toNumber()) / 3
+    const monthlyTotal = Math.abs((allSpendAgg._sum.amount ?? new Decimal(0)).toNumber()) / 3
+    const monthlyDiscretionary = Math.max(0, monthlyTotal - monthlyEssentials - monthlySubscriptions)
+    const totalMonthlyCommitted = monthlyEssentials + monthlySubscriptions
+    const disposableIncome = monthlyIncome > 0 ? monthlyIncome - totalMonthlyCommitted : 0
+    const currentBalance = accounts
+      .filter(a => a.accountType !== 'savings')
+      .reduce((s, a) => s + (a.currentBalance ?? new Decimal(0)).toNumber(), 0)
+    const savingsRate = monthlyIncome > 0
+      ? Math.max(0, (monthlyIncome - monthlyTotal) / monthlyIncome * 100)
+      : null
+
+    return {
+      monthlyIncome,
+      monthlyEssentials,
+      monthlySubscriptions,
+      monthlyDiscretionary,
+      totalMonthlyCommitted,
+      disposableIncome,
+      savingsRate,
+      currentBalance,
+    }
+  }
+
+  /**
+   * Calculates how much is safe to spend in a short period (weekend/week).
+   * Deducts upcoming committed payments (DDs, subscriptions) from balance.
+   */
+  async getSafeToSpend(userId: string, days: number): Promise<SafeToSpend> {
+    const now = new Date()
+    const periodEnd = new Date(now.getTime() + days * 86_400_000)
+    const periodLabel = days <= 2 ? 'this weekend' : days <= 7 ? 'this week' : `the next ${days} days`
+
+    // Current balances (current accounts only, not savings)
+    const accounts = await this.prisma.account.findMany({
+      where: { userId, isActive: true, accountType: { not: 'savings' } },
+      select: { currentBalance: true, availableBalance: true },
+    })
+    const currentBalance = accounts.reduce(
+      (s, a) => s + ((a.availableBalance ?? a.currentBalance ?? new Decimal(0)).toNumber()),
+      0,
+    )
+
+    // Subscriptions and recurring debits that typically fall in this window
+    // Use historical same-day-of-month transactions as proxy for upcoming DDs
+    const upcomingDays = Array.from({ length: days }, (_, i) => {
+      const d = new Date(now)
+      d.setDate(d.getDate() + i + 1)
+      return d.getDate()
+    })
+
+    const historicalRecurring = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        isSubscription: true,
+        amount: { lt: 0 },
+        transactionDate: { gte: new Date(now.getFullYear(), now.getMonth() - 3, 1) },
+      },
+      select: { amount: true, merchantName: true, transactionDate: true, subscriptionName: true },
+    })
+
+    // Find recurring payments whose typical day-of-month falls in our window
+    const upcomingCommitted: number[] = []
+    const seen = new Set<string>()
+    for (const t of historicalRecurring) {
+      const dom = t.transactionDate.getDate()
+      const key = t.subscriptionName ?? t.merchantName ?? 'unknown'
+      if (upcomingDays.includes(dom) && !seen.has(key)) {
+        seen.add(key)
+        upcomingCommitted.push(Math.abs(t.amount.toNumber()))
+      }
+    }
+
+    const committedThisPeriod = upcomingCommitted.reduce((s, a) => s + a, 0)
+    const safeAmount = Math.max(0, currentBalance - committedThisPeriod - 50) // £50 buffer
+
+    const warningFlags: string[] = []
+    if (currentBalance < 200) warningFlags.push('Your balance is low')
+    if (committedThisPeriod > 0) warningFlags.push(`£${committedThisPeriod.toFixed(0)} in bills due soon`)
+    if (safeAmount < 50) warningFlags.push('Very little available after commitments')
+
+    return { currentBalance, committedThisPeriod, safeAmount, periodLabel, warningFlags }
   }
 
   /**

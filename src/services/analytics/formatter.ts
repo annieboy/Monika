@@ -1,7 +1,9 @@
 import type {
   AccountBalance,
+  AffordabilityProfile,
   CategorySpend,
   MonthlyComparison,
+  SafeToSpend,
   Subscription,
   UnusualTransaction,
 } from './analytics.js'
@@ -106,6 +108,89 @@ export function formatAccountBalances(balances: AccountBalance[]): string {
 
   if (balances.length > 1) {
     out += `\nTotal across all accounts: ${formatGBP(total)}`
+  }
+
+  return out.trim()
+}
+
+export function formatAffordability(profile: AffordabilityProfile, userMessage: string): string {
+  const { monthlyIncome, totalMonthlyCommitted, disposableIncome, currentBalance, savingsRate } = profile
+
+  // Extract a target amount from the message (e.g. "£400k mortgage", "£1,200 sofa")
+  const amountMatch = userMessage.match(/£([\d,]+)k?\b/i)
+  let targetAmount: number | null = null
+  if (amountMatch?.[1]) {
+    const raw = parseFloat(amountMatch[1].replace(/,/g, ''))
+    targetAmount = userMessage.toLowerCase().includes('k') ? raw * 1000 : raw
+  }
+
+  const isMortgage = /mortgage/i.test(userMessage)
+
+  let out = ''
+
+  if (monthlyIncome === 0) {
+    out = `I can see your spending but couldn't detect a regular salary in your transactions. `
+    out += `To answer this properly, your income needs to be visible in your connected account.\n\n`
+    out += `What I can see:\n`
+    out += `• Current balance: ${formatGBP(currentBalance)}\n`
+    out += `• Monthly committed costs: ${formatGBP(totalMonthlyCommitted)}`
+    return out.trim()
+  }
+
+  if (isMortgage && targetAmount) {
+    // Rough mortgage affordability: lenders typically offer 4-4.5x salary
+    const annualIncome = monthlyIncome * 12
+    const maxBorrow4x = annualIncome * 4
+    const maxBorrow45x = annualIncome * 4.5
+    const canAfford = targetAmount <= maxBorrow45x
+
+    // Estimated monthly repayment (25yr, ~5% rate)
+    const monthlyRepayment = (targetAmount * 0.005 * Math.pow(1.005, 300)) / (Math.pow(1.005, 300) - 1)
+    const affordableRepayment = disposableIncome * 0.45 // lenders want < 45% of disposable
+
+    out += canAfford
+      ? `Based on your income, a £${(targetAmount / 1000).toFixed(0)}k mortgage could be within reach.\n\n`
+      : `A £${(targetAmount / 1000).toFixed(0)}k mortgage may be a stretch based on your income.\n\n`
+
+    out += `Here's the breakdown:\n`
+    out += `• Monthly income: ${formatGBP(monthlyIncome)}\n`
+    out += `• Typical lender max (4–4.5× salary): ${formatGBP(maxBorrow4x)}–${formatGBP(maxBorrow45x)}\n`
+    out += `• Est. monthly repayment: ${formatGBP(monthlyRepayment)} (25yr, ~5%)\n`
+    out += `• Your current disposable income: ${formatGBP(disposableIncome)}\n`
+    out += monthlyRepayment <= affordableRepayment
+      ? `• Repayment looks manageable vs your income ✓`
+      : `• Repayment would be tight vs your current outgoings ⚠️`
+  } else if (targetAmount) {
+    const canAfford = targetAmount <= disposableIncome
+    out += canAfford
+      ? `Yes, ${formatGBP(targetAmount)} looks affordable.\n\n`
+      : `${formatGBP(targetAmount)} would stretch your finances this month.\n\n`
+    out += `• Monthly disposable income: ${formatGBP(disposableIncome)}\n`
+    out += `• Current balance: ${formatGBP(currentBalance)}`
+  } else {
+    out += `Your financial snapshot:\n`
+    out += `• Monthly income: ${formatGBP(monthlyIncome)}\n`
+    out += `• Committed costs: ${formatGBP(totalMonthlyCommitted)} (essentials + subscriptions)\n`
+    out += `• Disposable income: ${formatGBP(disposableIncome)}\n`
+    out += `• Current balance: ${formatGBP(currentBalance)}`
+    if (savingsRate !== null) out += `\n• Savings rate: ~${savingsRate.toFixed(0)}%`
+  }
+
+  return out.trim()
+}
+
+export function formatSafeToSpend(data: SafeToSpend): string {
+  const { currentBalance, committedThisPeriod, safeAmount, periodLabel, warningFlags } = data
+
+  let out = `Safe to spend ${periodLabel}: ${formatGBP(safeAmount)}\n\n`
+  out += `• Current balance: ${formatGBP(currentBalance)}\n`
+  if (committedThisPeriod > 0) {
+    out += `• Bills due soon: ${formatGBP(committedThisPeriod)}\n`
+  }
+  out += `• Buffer kept: £50`
+
+  if (warningFlags.length > 0) {
+    out += `\n\n⚠️ ${warningFlags.join(' · ')}`
   }
 
   return out.trim()

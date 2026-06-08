@@ -75,7 +75,7 @@ describe('classifyIntent — affordability_question patterns', () => {
 
   it('"Is it safe to spend £500 on a new laptop?"', async () => {
     const result = await classifyIntent('Is it safe to spend £500 on a new laptop?', NO_KEY)
-    expect(result.intent).toBe('affordability_question')
+    expect(result.intent).toBe('safe_to_spend')
   })
 })
 
