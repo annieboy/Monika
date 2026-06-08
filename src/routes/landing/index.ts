@@ -470,8 +470,8 @@ function landingHtml(): string {
         <!-- animated by JS -->
       </div>
       <div class="phone-input">
-        <input type="text" placeholder="Message" readonly>
-        <div class="send-btn">➤</div>
+        <input type="text" placeholder="Message" readonly id="hero-input">
+        <div class="send-btn" id="hero-send">➤</div>
       </div>
     </div>
     <div class="floating-card right">
@@ -865,76 +865,109 @@ function typeLoop() {
 setTimeout(typeLoop, 800);
 
 // ── Hero phone animation ───────────────────────────────────────────────────
-const heroConvos = [
+const heroBody = document.getElementById('hero-phone-body');
+const heroInput = document.getElementById('hero-input');
+const heroSend = document.getElementById('hero-send');
+
+// The scripted conversation to replay on loop
+const script = [
   {
-    q: 'What\\'s my balance?',
-    a: '💳 Your balances:\n• Monzo Current: <strong>£1,842.50</strong>\n• HSBC Savings: <strong>£4,210.00</strong>\n\nTotal: <strong>£6,052.50</strong>',
+    type: 'user',
+    text: 'Hello',
   },
   {
-    q: 'How much on groceries this month?',
-    a: '🛒 Grocery spending in June:\n<strong>£284</strong> across 11 transactions.\n\nThat\\'s £42 less than May. ✅',
+    type: 'bot',
+    text: 'Welcome to Monika! 👋 I\'m your AI-powered UK finance assistant.\n\nI can help you with:\n• Spending & balances\n• Subscriptions & bills\n• Mortgage affordability\n• Safe-to-spend amounts\n\nTo get started, say <strong>"connect my bank"</strong>.',
   },
   {
-    q: 'Find my subscriptions',
-    a: '🔁 6 subscriptions found:\nNetflix · Spotify · Amazon Prime\nGym · iCloud · Disney+\n\nTotal: <strong>£80.95/month</strong>',
+    type: 'user',
+    text: 'When is my next direct debit?',
   },
   {
-    q: 'Safe to spend this weekend?',
-    a: '✅ Safe to spend: <strong>£347</strong>\n\nBalance: £1,842 minus rent (£1,445 due Mon) minus £50 buffer.',
+    type: 'bot',
+    text: '📅 Upcoming direct debits:\n\n• <strong>Rent — £1,200</strong> due in 3 days\n• Council Tax — £142 on 1st\n• Netflix — £17.99 on 14th\n\n⚠️ Your current balance is <strong>£1,187</strong>. After rent, you\'ll have just <strong>£–13</strong> left — your balance will be too low. Consider topping up before the 1st.',
+  },
+  {
+    type: 'user',
+    text: 'Can I afford a £400k mortgage?',
+  },
+  {
+    type: 'bot',
+    text: '🏠 Based on your income of <strong>£4,200/month</strong>:\n\n• Lender max (4–4.5×): £201k–£226k\n• A £400k mortgage is a stretch\n• Est. repayment: <strong>£2,147/mo</strong>\n• Your disposable: <strong>£1,890/mo</strong>\n\n⚠️ Repayment exceeds your disposable by £257/mo. A larger deposit or joint application would help.',
   },
 ];
-let heroIdx = 0;
-const heroBody = document.getElementById('hero-phone-body');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function now() {
+  return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
 
 function makeMsg(role, html) {
   const d = document.createElement('div');
   d.className = 'msg ' + role + ' msg-anim';
-  d.style.animationDelay = '0ms';
-  if (role === 'bot') d.innerHTML = '<strong>Monika</strong>' + html.replace(/\n/g,'<br>') + '<div class="msg-time">' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '</div>';
-  else d.innerHTML = html + '<div class="msg-time">' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + ' ✓✓</div>';
+  if (role === 'bot') {
+    d.innerHTML = '<strong>Monika</strong>' + html.replace(/\\n/g, '<br>') + '<div class="msg-time">' + now() + '</div>';
+  } else {
+    d.innerHTML = html + '<div class="msg-time">' + now() + ' ✓✓</div>';
+  }
   return d;
 }
 
 function makeTyping() {
   const d = document.createElement('div');
   d.className = 'typing-indicator';
-  d.id = 'typing';
   d.innerHTML = '<span></span><span></span><span></span>';
   return d;
 }
 
+// Type text into the input bar character by character
+async function typeIntoInput(text) {
+  heroInput.value = '';
+  heroInput.placeholder = '';
+  for (const ch of text) {
+    heroInput.value += ch;
+    await sleep(55 + Math.random() * 40);
+  }
+  // Flash the send button
+  heroSend.style.background = '#128C7E';
+  await sleep(200);
+  heroSend.style.background = '';
+  heroInput.value = '';
+  heroInput.placeholder = 'Message';
+}
+
 async function runHeroLoop() {
+  await sleep(800);
   while (true) {
-    const c = heroConvos[heroIdx % heroConvos.length];
-    heroIdx++;
-
-    // Clear if too many messages
-    if (heroBody.children.length > 6) {
-      heroBody.innerHTML = '';
-      await sleep(300);
+    heroBody.innerHTML = '';
+    for (const step of script) {
+      if (step.type === 'user') {
+        // Animate typing in the input bar
+        await typeIntoInput(step.text);
+        await sleep(150);
+        // Pop the message into the chat
+        const m = makeMsg('user', step.text);
+        heroBody.appendChild(m);
+        heroBody.scrollTop = heroBody.scrollHeight;
+        await sleep(600);
+      } else {
+        // Show typing indicator
+        const ty = makeTyping();
+        heroBody.appendChild(ty);
+        heroBody.scrollTop = heroBody.scrollHeight;
+        // Typing delay proportional to reply length
+        const delay = Math.min(1200 + step.text.length * 8, 3000);
+        await sleep(delay);
+        ty.remove();
+        const m = makeMsg('bot', step.text);
+        heroBody.appendChild(m);
+        heroBody.scrollTop = heroBody.scrollHeight;
+        await sleep(3800);
+      }
     }
-
-    // Add user message
-    const um = makeMsg('user', c.q);
-    heroBody.appendChild(um);
-    heroBody.scrollTop = heroBody.scrollHeight;
-    await sleep(900);
-
-    // Show typing
-    const ty = makeTyping();
-    heroBody.appendChild(ty);
-    heroBody.scrollTop = heroBody.scrollHeight;
-    await sleep(1600);
-
-    // Remove typing, add bot reply
-    ty.remove();
-    const bm = makeMsg('bot', c.a);
-    heroBody.appendChild(bm);
-    heroBody.scrollTop = heroBody.scrollHeight;
-
-    await sleep(4200);
+    // Pause before replaying
+    await sleep(2000);
   }
 }
 runHeroLoop();
