@@ -115,7 +115,8 @@ const healthRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       checks['database'] = {
         ok: false,
         latencyMs: Date.now() - dbStart,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        // Never leak DB connection details in production
+        error: process.env['NODE_ENV'] === 'production' ? 'Database unavailable' : (err instanceof Error ? err.message : 'Unknown error'),
       }
     }
 

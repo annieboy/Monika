@@ -246,7 +246,7 @@ describe('TrueLayerProvider — getAccounts', () => {
   it('uses 0 balance when balance fetch fails', async () => {
     vi.stubGlobal('fetch', mockFetch([
       { ok: true, body: { results: [{ account_id: 'acc-1', account_type: 'TRANSACTION', display_name: 'Current', currency: 'GBP' }] } },
-      { ok: false, status: 500, body: 'error' },
+      { ok: false, status: 400, body: 'error' },  // 400 is non-retryable
     ]))
 
     const provider = makeProvider()

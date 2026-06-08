@@ -25,6 +25,8 @@ import bankingRoutes from './routes/banking/index.js'
 import agentRoutes from './routes/agent/index.js'
 import adminRoutes from './routes/admin/index.js'
 import devRoutes from './routes/dev/index.js'
+import userRoutes from './routes/users/index.js'
+import legalRoutes from './routes/legal/index.js'
 
 export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   const app = Fastify({
@@ -35,14 +37,24 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
 
   // ── Security ───────────────────────────────────────────────────────────────
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],   // Admin dashboard uses inline scripts
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
   })
 
   await app.register(cors, {
     origin:
       config.NODE_ENV === 'production'
-        ? ['https://app.monika.ai']
-        : true,
+        ? ['https://app.monika.ai', 'https://monika-21wq.onrender.com']
+        : ['http://localhost:3000', 'http://127.0.0.1:3000'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 
@@ -83,6 +95,8 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   await app.register(bankingRoutes, { prefix: '/banking' })
   await app.register(agentRoutes, { prefix: '/agent' })
   await app.register(adminRoutes, { prefix: '/admin' })
+  await app.register(userRoutes, { prefix: '/users' })
+  await app.register(legalRoutes)
 
   if (config.NODE_ENV !== 'production') {
     await app.register(devRoutes, { prefix: '/dev' })

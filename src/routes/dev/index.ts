@@ -18,6 +18,12 @@ interface SimulateBody {
 }
 
 const devRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
+  // Defence-in-depth: always return 404 in production regardless of how this plugin was registered
+  app.addHook('onRequest', async (_request, reply) => {
+    if (process.env['NODE_ENV'] === 'production') {
+      return reply.status(404).send({ error: 'Not Found' })
+    }
+  })
   /**
    * POST /dev/simulate
    *

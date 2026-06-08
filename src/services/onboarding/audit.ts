@@ -8,6 +8,8 @@ export type ConsentEvent =
   | 'bank_connect_token_expired'
   | 'bank_connect_token_already_used'
   | 'bank_connect_token_not_found'
+  | 'bank_disconnected'
+  | 'user_deleted'
 
 /**
  * Appends an immutable audit log entry for a consent lifecycle event.

@@ -204,6 +204,21 @@ export class TrueLayerProvider implements OpenBankingProvider {
     }
   }
 
+  async revokeConsent(accessToken: string): Promise<void> {
+    const res = await fetch(`${this.authBase}/connect/revocation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: new URLSearchParams({ token: accessToken }).toString(),
+    })
+    // 200 or 204 = success; anything else we log but don't throw — deletion must still proceed
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`TrueLayer revocation failed (${res.status})`)
+    }
+  }
+
   // ── Data fetching ──────────────────────────────────────────────────────
 
   async getAccounts(consent: ProviderConsent): Promise<ProviderAccount[]> {
@@ -211,12 +226,12 @@ export class TrueLayerProvider implements OpenBankingProvider {
 
     const accounts: ProviderAccount[] = []
     for (const a of res) {
-      const balance = await this.fetchBalance(a.account_id, consent.accessToken)
+      const { balance, unavailable } = await this.fetchBalance(a.account_id, consent.accessToken)
       const last4 = a.account_number?.number?.slice(-4)
       accounts.push({
         providerAccountId: a.account_id,
         accountType: ACCOUNT_TYPE_MAP[a.account_type] ?? 'current',
-        displayName: a.display_name,
+        displayName: unavailable ? `${a.display_name} (balance unavailable)` : a.display_name,
         currency: a.currency,
         currentBalance: balance?.current ?? 0,
         ...(balance?.available !== undefined ? { availableBalance: balance.available } : {}),
@@ -248,19 +263,19 @@ export class TrueLayerProvider implements OpenBankingProvider {
   private async fetchBalance(
     accountId: string,
     accessToken: string,
-  ): Promise<TLBalance | null> {
+  ): Promise<{ balance: TLBalance | null; unavailable: boolean }> {
     try {
       const res = await this.apiFetch<TLBalance>(
         `/data/v1/accounts/${encodeURIComponent(accountId)}/balance`,
         accessToken,
       )
-      return res[0] ?? null
+      return { balance: res[0] ?? null, unavailable: false }
     } catch {
-      return null
+      return { balance: null, unavailable: true }
     }
   }
 
-  private async apiFetch<T>(path: string, accessToken: string): Promise<T[]> {
+  private async apiFetch<T>(path: string, accessToken: string, attempt = 1): Promise<T[]> {
     const res = await fetch(`${this.apiBase}${path}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -268,6 +283,12 @@ export class TrueLayerProvider implements OpenBankingProvider {
       },
     })
     if (res.status === 401) throw new Error('TrueLayer: access token expired or invalid')
+    // Retry on 429 or 5xx with exponential backoff (max 3 attempts)
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+      const delay = Math.pow(2, attempt) * 1000
+      await new Promise((r) => setTimeout(r, delay))
+      return this.apiFetch<T>(path, accessToken, attempt + 1)
+    }
     if (!res.ok) throw new Error(`TrueLayer API error ${res.status}: ${path}`)
     const body = (await res.json()) as { results: T[] }
     return body.results

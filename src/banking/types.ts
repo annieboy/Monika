@@ -64,4 +64,7 @@ export interface OpenBankingProvider {
 
   /** Refresh an expiring access token. */
   refreshToken(consent: ProviderConsent): Promise<ProviderConsent>
+
+  /** Revoke consent with the provider (called on disconnect or user deletion). */
+  revokeConsent?(accessToken: string): Promise<void>
 }

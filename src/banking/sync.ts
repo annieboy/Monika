@@ -1,8 +1,47 @@
 import type { PrismaClient, Account } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import type { OpenBankingProvider, ProviderConsent, ProviderTransaction } from './types.js'
-import { transactionDedupHash } from '../lib/crypto.js'
+import { transactionDedupHash, encrypt } from '../lib/crypto.js'
 import { trackEvent } from '../services/analytics/events.js'
+import { config } from '../config.js'
+
+// Refresh token if it expires within 5 minutes
+const REFRESH_BUFFER_MS = 5 * 60 * 1000
+
+async function ensureFreshToken(
+  prisma: PrismaClient,
+  connectionId: string,
+  consent: ProviderConsent,
+  provider: OpenBankingProvider,
+): Promise<ProviderConsent> {
+  const expiresAt = consent.tokenExpiresAt
+  if (!expiresAt || expiresAt.getTime() - Date.now() > REFRESH_BUFFER_MS) return consent
+
+  const refreshed = await provider.refreshToken(consent)
+
+  const accessTokenEnc = encrypt(
+    Buffer.from(refreshed.accessToken, 'utf-8'),
+    config.ENCRYPTION_KEY,
+  ) as unknown as Uint8Array<ArrayBuffer>
+
+  const refreshTokenEnc = refreshed.refreshToken
+    ? (encrypt(
+        Buffer.from(refreshed.refreshToken, 'utf-8'),
+        config.ENCRYPTION_KEY,
+      ) as unknown as Uint8Array<ArrayBuffer>)
+    : undefined
+
+  await prisma.bankConnection.update({
+    where: { id: connectionId },
+    data: {
+      accessTokenEnc,
+      ...(refreshTokenEnc ? { refreshTokenEnc } : {}),
+      tokenExpiresAt: refreshed.tokenExpiresAt ?? null,
+    },
+  })
+
+  return refreshed
+}
 
 const SYNC_WINDOW_DAYS = 90
 
@@ -152,6 +191,7 @@ export async function runFullSync(
   const from = fromDate ?? new Date(Date.now() - SYNC_WINDOW_DAYS * 86_400_000)
   const errors: string[] = []
 
+  consent = await ensureFreshToken(prisma, connectionId, consent, provider)
   const accounts = await syncAccounts(prisma, connectionId, userId, consent, provider)
 
   let transactionsImported = 0

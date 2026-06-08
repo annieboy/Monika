@@ -9,6 +9,7 @@ import { config } from './config.js'
 import { logger } from './logger.js'
 import { buildApp } from './app.js'
 import { initMonitoring, flushMonitoring, captureException } from './lib/monitoring.js'
+import { startSyncScheduler } from './services/sync/scheduler.js'
 
 async function start(): Promise<void> {
   await initMonitoring()
@@ -58,6 +59,9 @@ async function start(): Promise<void> {
       },
       'Server started',
     )
+    if (config.NODE_ENV === 'production') {
+      startSyncScheduler(app.prisma)
+    }
   } catch (err) {
     logger.error({ err }, 'Failed to start server')
     process.exit(1)

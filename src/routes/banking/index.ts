@@ -5,6 +5,7 @@ import { logConsentEvent } from '../../services/onboarding/audit.js'
 import { successPage, failurePage } from '../../services/onboarding/pages.js'
 import { config } from '../../config.js'
 import bankingStartRoute from './start.js'
+import disconnectRoute from './disconnect.js'
 import { sendBankConnectedNotification } from '../../services/whatsapp/notify.js'
 
 interface ConnectQuery {
@@ -22,6 +23,9 @@ interface CallbackQuery {
 const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── GET /banking/start?token=... ─────────────────────────────────────────
   await app.register(bankingStartRoute)
+
+  // ── DELETE /banking/connections/:connectionId ─────────────────────────────
+  await app.register(disconnectRoute)
 
   // ── GET /banking/connect ──────────────────────────────────────────────────
   /**
