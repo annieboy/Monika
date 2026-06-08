@@ -872,7 +872,7 @@ setTimeout(typeLoop, 800);
   var heroBody = document.getElementById('hero-phone-body');
   var heroInput = document.getElementById('hero-input');
   var heroSend = document.getElementById('hero-send');
-  var steps = JSON.parse(document.getElementById('hero-convo-data').textContent);
+  var steps = null;
 
   function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
@@ -932,6 +932,7 @@ setTimeout(typeLoop, 800);
 
   async function runLoop() {
     await sleep(800);
+    steps = JSON.parse(document.getElementById('hero-convo-data').textContent);
     while (true) {
       heroBody.innerHTML = '';
       for (var i = 0; i < steps.length; i++) {
