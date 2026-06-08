@@ -59,14 +59,15 @@ services:
       - key: SENTRY_DSN
         sync: false
 
+  - type: redis
+    name: monika-redis
+    region: london
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
 databases:
   - name: monika-db
     databaseName: monika
     region: london
     plan: starter
-
-  - name: monika-redis
-    type: redis
-    region: london
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
