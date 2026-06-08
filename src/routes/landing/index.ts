@@ -865,112 +865,121 @@ function typeLoop() {
 setTimeout(typeLoop, 800);
 
 // ── Hero phone animation ───────────────────────────────────────────────────
-const heroBody = document.getElementById('hero-phone-body');
-const heroInput = document.getElementById('hero-input');
-const heroSend = document.getElementById('hero-send');
+(function() {
+  var heroBody = document.getElementById('hero-phone-body');
+  var heroInput = document.getElementById('hero-input');
+  var heroSend = document.getElementById('hero-send');
 
-// The scripted conversation to replay on loop
-const script = [
-  {
-    type: 'user',
-    text: 'Hello',
-  },
-  {
-    type: 'bot',
-    text: 'Welcome to Monika! 👋 I\'m your AI-powered UK finance assistant.\n\nI can help you with:\n• Spending & balances\n• Subscriptions & bills\n• Mortgage affordability\n• Safe-to-spend amounts\n\nTo get started, say <strong>"connect my bank"</strong>.',
-  },
-  {
-    type: 'user',
-    text: 'When is my next direct debit?',
-  },
-  {
-    type: 'bot',
-    text: '📅 Upcoming direct debits:\n\n• <strong>Rent — £1,200</strong> due in 3 days\n• Council Tax — £142 on 1st\n• Netflix — £17.99 on 14th\n\n⚠️ Your current balance is <strong>£1,187</strong>. After rent, you\'ll have just <strong>£–13</strong> left — your balance will be too low. Consider topping up before the 1st.',
-  },
-  {
-    type: 'user',
-    text: 'Can I afford a £400k mortgage?',
-  },
-  {
-    type: 'bot',
-    text: '🏠 Based on your income of <strong>£4,200/month</strong>:\n\n• Lender max (4–4.5×): £201k–£226k\n• A £400k mortgage is a stretch\n• Est. repayment: <strong>£2,147/mo</strong>\n• Your disposable: <strong>£1,890/mo</strong>\n\n⚠️ Repayment exceeds your disposable by £257/mo. A larger deposit or joint application would help.',
-  },
-];
+  var convo = [
+    { type:'user', text:'Hello' },
+    { type:'bot', lines:[
+      'Welcome to Monika! 👋 I am your AI-powered UK finance assistant.',
+      '',
+      'I can help with:',
+      '• Spending &amp; balances',
+      '• Subscriptions &amp; bills',
+      '• Mortgage affordability',
+      '• Safe-to-spend amounts',
+      '',
+      'Say <b>connect my bank</b> to get started.'
+    ]},
+    { type:'user', text:'When is my next direct debit?' },
+    { type:'bot', lines:[
+      '📅 <b>Upcoming direct debits:</b>',
+      '',
+      '• <b>Rent — £1,200</b> due in 3 days',
+      '• Council Tax — £142 on 1st',
+      '• Netflix — £17.99 on 14th',
+      '',
+      '⚠️ Balance: <b>£1,187</b>. After rent you will have <b>–£13</b>.',
+      'Your balance will be too low — top up before the 1st.'
+    ]},
+    { type:'user', text:'Can I afford a £400k mortgage?' },
+    { type:'bot', lines:[
+      '🏠 Based on your income of <b>£4,200/mo</b>:',
+      '',
+      '• Lender max (4–4.5×): £201k–£226k',
+      '• Est. repayment: <b>£2,147/mo</b>',
+      '• Your disposable: <b>£1,890/mo</b>',
+      '',
+      '⚠️ A £400k mortgage is a stretch — repayment exceeds your disposable income by £257/mo.'
+    ]}
+  ];
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
 
-function now() {
-  return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
-function makeMsg(role, html) {
-  const d = document.createElement('div');
-  d.className = 'msg ' + role + ' msg-anim';
-  if (role === 'bot') {
-    d.innerHTML = '<strong>Monika</strong>' + html.replace(/\\n/g, '<br>') + '<div class="msg-time">' + now() + '</div>';
-  } else {
-    d.innerHTML = html + '<div class="msg-time">' + now() + ' ✓✓</div>';
+  function nowTime(){
+    return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   }
-  return d;
-}
 
-function makeTyping() {
-  const d = document.createElement('div');
-  d.className = 'typing-indicator';
-  d.innerHTML = '<span></span><span></span><span></span>';
-  return d;
-}
-
-// Type text into the input bar character by character
-async function typeIntoInput(text) {
-  heroInput.value = '';
-  heroInput.placeholder = '';
-  for (const ch of text) {
-    heroInput.value += ch;
-    await sleep(55 + Math.random() * 40);
+  function makeUserMsg(text){
+    var d = document.createElement('div');
+    d.className = 'msg user msg-anim';
+    d.innerHTML = text + '<div class="msg-time">' + nowTime() + ' ✓✓</div>';
+    return d;
   }
-  // Flash the send button
-  heroSend.style.background = '#128C7E';
-  await sleep(200);
-  heroSend.style.background = '';
-  heroInput.value = '';
-  heroInput.placeholder = 'Message';
-}
 
-async function runHeroLoop() {
-  await sleep(800);
-  while (true) {
-    heroBody.innerHTML = '';
-    for (const step of script) {
-      if (step.type === 'user') {
-        // Animate typing in the input bar
-        await typeIntoInput(step.text);
-        await sleep(150);
-        // Pop the message into the chat
-        const m = makeMsg('user', step.text);
-        heroBody.appendChild(m);
-        heroBody.scrollTop = heroBody.scrollHeight;
-        await sleep(600);
-      } else {
-        // Show typing indicator
-        const ty = makeTyping();
-        heroBody.appendChild(ty);
-        heroBody.scrollTop = heroBody.scrollHeight;
-        // Typing delay proportional to reply length
-        const delay = Math.min(1200 + step.text.length * 8, 3000);
-        await sleep(delay);
-        ty.remove();
-        const m = makeMsg('bot', step.text);
-        heroBody.appendChild(m);
-        heroBody.scrollTop = heroBody.scrollHeight;
-        await sleep(3800);
-      }
+  function makeBotMsg(lines){
+    var d = document.createElement('div');
+    d.className = 'msg bot msg-anim';
+    d.innerHTML = '<strong>Monika</strong>' + lines.join('<br>') + '<div class="msg-time">' + nowTime() + '</div>';
+    return d;
+  }
+
+  function makeTyping(){
+    var d = document.createElement('div');
+    d.className = 'typing-indicator';
+    d.innerHTML = '<span></span><span></span><span></span>';
+    return d;
+  }
+
+  async function typeInput(text){
+    heroInput.value = '';
+    heroInput.placeholder = '';
+    for(var i=0;i<text.length;i++){
+      heroInput.value += text[i];
+      await sleep(50 + Math.random()*45);
     }
-    // Pause before replaying
-    await sleep(2000);
+    heroSend.style.background = '#128C7E';
+    heroSend.style.transform = 'scale(1.2)';
+    await sleep(180);
+    heroSend.style.background = '';
+    heroSend.style.transform = '';
+    heroInput.value = '';
+    heroInput.placeholder = 'Message';
   }
-}
-runHeroLoop();
+
+  async function run(){
+    await sleep(600);
+    while(true){
+      heroBody.innerHTML = '';
+      for(var s=0;s<convo.length;s++){
+        var step = convo[s];
+        if(step.type === 'user'){
+          await typeInput(step.text);
+          await sleep(120);
+          var m = makeUserMsg(step.text);
+          heroBody.appendChild(m);
+          heroBody.scrollTop = heroBody.scrollHeight;
+          await sleep(500);
+        } else {
+          var ty = makeTyping();
+          heroBody.appendChild(ty);
+          heroBody.scrollTop = heroBody.scrollHeight;
+          var delay = Math.min(1000 + step.lines.join('').length * 10, 2800);
+          await sleep(delay);
+          ty.remove();
+          var bm = makeBotMsg(step.lines);
+          heroBody.appendChild(bm);
+          heroBody.scrollTop = heroBody.scrollHeight;
+          await sleep(4000);
+        }
+      }
+      await sleep(1500);
+    }
+  }
+  run();
+})();
 </script>
 
 </body>
