@@ -141,7 +141,8 @@ function landingHtml(): string {
     .phone-contact { flex: 1; }
     .phone-contact .name { font-weight: 600; font-size: 0.95rem; }
     .phone-contact .status { font-size: 0.72rem; opacity: 0.8; }
-    .phone-body { background: #ece5dd; padding: 16px 12px; min-height: 480px; display: flex; flex-direction: column; gap: 10px; }
+    .phone-body { background: #ece5dd; padding: 16px 12px; height: 480px; max-height: 480px; overflow-y: scroll; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; scrollbar-width: none; }
+    .phone-body::-webkit-scrollbar { display: none; }
     .msg { max-width: 78%; padding: 10px 14px; border-radius: 12px; font-size: 0.82rem; line-height: 1.5; position: relative; }
     .msg-time { font-size: 0.65rem; opacity: 0.6; margin-top: 4px; text-align: right; }
     .msg.user { background: #dcf8c6; margin-left: auto; border-radius: 12px 2px 12px 12px; }
