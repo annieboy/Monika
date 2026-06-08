@@ -37,6 +37,47 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'merchant_query',
+    patterns: [
+      /how\s+much\s+(have\s+i\s+spent?\s+at|did\s+i\s+spend\s+at|do\s+i\s+spend\s+at)/i,
+      /how\s+much\s+(have\s+i\s+spent?\s+on|did\s+i\s+spend\s+on)\s+(amazon|tesco|sainsbury|waitrose|deliveroo|uber|spotify|netflix|apple|google|paypal)/i,
+      /\bspend\s+at\b/i,
+      /\bspent\s+at\b/i,
+    ],
+  },
+  {
+    intent: 'income_query',
+    patterns: [
+      /when\s+(does|is|will)\s+(my\s+)?(salary|pay|wage|income|paycheck)/i,
+      /when\s+do\s+i\s+get\s+paid/i,
+      /how\s+much\s+(do\s+i\s+earn|is\s+my\s+salary|am\s+i\s+earning)/i,
+      /my\s+(salary|income|wages?|earnings?|pay)/i,
+      /next\s+payday/i,
+      /\bpayday\b/i,
+    ],
+  },
+  {
+    intent: 'savings_query',
+    patterns: [
+      /how\s+much\s+(have\s+i\s+saved|am\s+i\s+saving|did\s+i\s+save)/i,
+      /am\s+i\s+saving\s+enough/i,
+      /savings?\s+(rate|goal|target)/i,
+      /could\s+i\s+save\s+more/i,
+      /how\s+much\s+could\s+i\s+save/i,
+    ],
+  },
+  {
+    intent: 'upcoming_bills',
+    patterns: [
+      /upcoming\s+bills?/i,
+      /bills?\s+due/i,
+      /what.*due\s+(this|next)\s+month/i,
+      /direct\s+debits?\s+due/i,
+      /what.*owe\s+this\s+month/i,
+      /payments?\s+due/i,
+    ],
+  },
+  {
     intent: 'safe_to_spend',
     patterns: [
       /safe\s+to\s+spend/i,

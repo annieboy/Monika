@@ -9,6 +9,26 @@ export interface CategorySpend {
   transactionCount: number
 }
 
+export interface FinancialSnapshot {
+  currentBalances: AccountBalance[]
+  totalBalance: number
+  monthlyIncome: number
+  thisMonthSpend: number
+  lastMonthSpend: number
+  topCategories: CategorySpend[]
+  subscriptions: Subscription[]
+  totalSubscriptions: number
+  recentTransactions: RecentTransaction[]
+  savingsRate: number | null
+}
+
+export interface RecentTransaction {
+  date: string
+  merchant: string
+  amount: number
+  category: string | null
+}
+
 export interface MerchantSpend {
   merchantName: string
   total: number
@@ -301,6 +321,102 @@ export class TransactionAnalyticsService {
     }
 
     return Array.from(flagged.values()).sort((a, b) => a.amount - b.amount) // most negative first
+  }
+
+  /**
+   * Spending by a specific merchant name (case-insensitive contains).
+   */
+  async getSpendingByMerchantName(
+    userId: string,
+    merchantName: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; transactionCount: number; transactions: RecentTransaction[] }> {
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        transactionDate: { gte: from, lte: to },
+        amount: { lt: 0 },
+        merchantName: { contains: merchantName, mode: 'insensitive' },
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: 20,
+      select: { merchantName: true, amount: true, transactionDate: true, category: true },
+    })
+    const total = rows.reduce((s, r) => s + Math.abs(r.amount.toNumber()), 0)
+    return {
+      total,
+      transactionCount: rows.length,
+      transactions: rows.map(r => ({
+        date: r.transactionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        merchant: r.merchantName ?? merchantName,
+        amount: Math.abs(r.amount.toNumber()),
+        category: r.category,
+      })),
+    }
+  }
+
+  /**
+   * Builds a full financial snapshot for conversational AI responses.
+   * Used when no structured template fits — gives Claude everything it needs.
+   */
+  async getFinancialSnapshot(userId: string): Promise<FinancialSnapshot> {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
+
+    const [balances, thisMonthAgg, lastMonthAgg, topCats, subs, incomeAgg, recentTxns] = await Promise.all([
+      this.getAccountBalances(userId),
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: monthStart }, amount: { lt: 0 }, isSalary: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: lastMonthStart, lte: lastMonthEnd }, amount: { lt: 0 }, isSalary: false },
+        _sum: { amount: true },
+      }),
+      this.getSpendingByCategory(userId, monthStart, now),
+      this.getSubscriptions(userId),
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { gt: 0 }, isSalary: true },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.findMany({
+        where: { userId, transactionDate: { gte: new Date(now.getTime() - 7 * 86_400_000) }, amount: { lt: 0 } },
+        orderBy: { transactionDate: 'desc' },
+        take: 10,
+        select: { merchantName: true, amount: true, transactionDate: true, category: true },
+      }),
+    ])
+
+    const totalBalance = balances.reduce((s, b) => s + b.currentBalance, 0)
+    const thisMonthSpend = Math.abs((thisMonthAgg._sum.amount ?? new Decimal(0)).toNumber())
+    const lastMonthSpend = Math.abs((lastMonthAgg._sum.amount ?? new Decimal(0)).toNumber())
+    const monthlyIncome = Math.abs((incomeAgg._sum.amount ?? new Decimal(0)).toNumber()) / 3
+    const totalSubscriptions = subs.reduce((s, sub) => s + sub.monthlyAmount, 0)
+    const savingsRate = monthlyIncome > 0
+      ? Math.max(0, (monthlyIncome - thisMonthSpend) / monthlyIncome * 100)
+      : null
+
+    return {
+      currentBalances: balances,
+      totalBalance,
+      monthlyIncome,
+      thisMonthSpend,
+      lastMonthSpend,
+      topCategories: topCats.slice(0, 6),
+      subscriptions: subs,
+      totalSubscriptions,
+      recentTransactions: recentTxns.map(t => ({
+        date: t.transactionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        merchant: t.merchantName ?? 'Unknown',
+        amount: Math.abs(t.amount.toNumber()),
+        category: t.category,
+      })),
+      savingsRate,
+    }
   }
 
   /**

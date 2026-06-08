@@ -3,6 +3,7 @@ import type {
   AffordabilityProfile,
   CategorySpend,
   MonthlyComparison,
+  RecentTransaction,
   SafeToSpend,
   Subscription,
   UnusualTransaction,
@@ -110,6 +111,73 @@ export function formatAccountBalances(balances: AccountBalance[]): string {
     out += `\nTotal across all accounts: ${formatGBP(total)}`
   }
 
+  return out.trim()
+}
+
+export function formatMerchantSpend(
+  merchantName: string,
+  data: { total: number; transactionCount: number; transactions: Array<{ date: string; merchant: string; amount: number }> },
+  fromDate: Date,
+): string {
+  if (data.transactionCount === 0) {
+    return `No transactions found at ${merchantName} in the selected period.`
+  }
+  const period = formatMonthName(fromDate)
+  let out = `Your ${merchantName} spending in ${period}:\n`
+  out += `• Total: ${formatGBP(data.total)} across ${data.transactionCount} transaction${data.transactionCount === 1 ? '' : 's'}\n`
+  if (data.transactions.length <= 5) {
+    for (const t of data.transactions) {
+      out += `• ${t.date}: ${formatGBP(t.amount)}\n`
+    }
+  }
+  return out.trim()
+}
+
+export function formatIncomeQuery(monthlyIncome: number, lastSalaryDate: Date | null, nextEstimatedDate: Date | null): string {
+  if (monthlyIncome === 0) {
+    return `I couldn't detect a regular salary in your connected account. Your income may be paid into a different account, or it might not be labelled as a salary in the transaction data.`
+  }
+
+  let out = `Based on your transaction history:\n`
+  out += `• Average monthly income: ${formatGBP(monthlyIncome)}\n`
+  if (lastSalaryDate) {
+    out += `• Last salary: ${lastSalaryDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}`
+  }
+  if (nextEstimatedDate) {
+    out += `\n• Next expected: ~${nextEstimatedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}`
+  }
+  return out.trim()
+}
+
+export function formatSavingsQuery(monthlyIncome: number, thisMonthSpend: number, savingsRate: number | null): string {
+  if (monthlyIncome === 0) {
+    return `I can see your spending but couldn't detect your income in the connected account. To calculate your savings rate, your salary needs to come into this account.`
+  }
+
+  const monthlySaving = Math.max(0, monthlyIncome - thisMonthSpend)
+  let out = `Your savings picture this month:\n`
+  out += `• Income: ${formatGBP(monthlyIncome)}\n`
+  out += `• Spending: ${formatGBP(thisMonthSpend)}\n`
+  out += `• Saving: ${formatGBP(monthlySaving)}`
+  if (savingsRate !== null) {
+    out += `\n• Savings rate: ${savingsRate.toFixed(0)}%`
+    if (savingsRate < 10) out += ` — aim for 20%`
+    else if (savingsRate >= 20) out += ` — great going ✓`
+  }
+  return out.trim()
+}
+
+export function formatUpcomingBills(subscriptions: Subscription[], committedThisMonth: number): string {
+  if (subscriptions.length === 0) {
+    return `I don't see any upcoming direct debits or subscriptions in your transaction history.`
+  }
+
+  const total = subscriptions.reduce((s, sub) => s + sub.monthlyAmount, 0)
+  let out = `Upcoming committed payments this month:\n`
+  for (const sub of subscriptions.sort((a, b) => b.monthlyAmount - a.monthlyAmount).slice(0, 8)) {
+    out += `• ${sub.merchantName}: ${formatGBP(sub.monthlyAmount)}\n`
+  }
+  out += `\nTotal: ${formatGBP(total)}/month`
   return out.trim()
 }
 

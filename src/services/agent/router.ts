@@ -9,8 +9,13 @@ import {
   formatAccountBalances,
   formatAffordability,
   formatSafeToSpend,
+  formatMerchantSpend,
+  formatIncomeQuery,
+  formatSavingsQuery,
+  formatUpcomingBills,
   polishWithLlm,
 } from '../analytics/formatter.js'
+import { answerWithAI } from './conversational.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
 import { trackEvent } from '../analytics/events.js'
@@ -129,15 +134,66 @@ export async function routeIntent(
     }
 
     case 'safe_to_spend': {
-      // Detect period from message: weekend=2 days, week=7, default=3
       const days = /week\b/i.test(message) && !/weekend/i.test(message) ? 7 : /month/i.test(message) ? 30 : 3
       const data = await analytics.getSafeToSpend(userId, days)
       structuredText = formatSafeToSpend(data)
       break
     }
 
-    default:
+    case 'merchant_query': {
+      const { fromDate: mFrom, toDate: mTo, merchantFilter } = extractQueryContext(message)
+      // Extract merchant from message if not caught by patterns
+      const merchant = merchantFilter ?? message.match(/(?:at|on|from)\s+([A-Za-z0-9 &]+?)(?:\?|$|\s+in|\s+last|\s+this)/i)?.[1]?.trim()
+      if (!merchant) {
+        structuredText = "Which merchant would you like to check? For example: \"How much have I spent at Tesco this month?\""
+      } else {
+        const result = await analytics.getSpendingByMerchantName(userId, merchant, mFrom, mTo)
+        structuredText = formatMerchantSpend(merchant, result, mFrom)
+      }
+      break
+    }
+
+    case 'income_query': {
+      const profile = await analytics.getAffordabilityProfile(userId)
+      // Detect last salary date
+      const lastSalary = await analytics['prisma'].transaction.findFirst({
+        where: { userId, isSalary: true, amount: { gt: 0 } },
+        orderBy: { transactionDate: 'desc' },
+        select: { transactionDate: true },
+      })
+      const lastDate = lastSalary?.transactionDate ?? null
+      // Estimate next payday: same day next month
+      const nextDate = lastDate
+        ? new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate())
+        : null
+      structuredText = formatIncomeQuery(profile.monthlyIncome, lastDate, nextDate)
+      break
+    }
+
+    case 'savings_query': {
+      const [profile, snap] = await Promise.all([
+        analytics.getAffordabilityProfile(userId),
+        analytics.getFinancialSnapshot(userId),
+      ])
+      structuredText = formatSavingsQuery(profile.monthlyIncome, snap.thisMonthSpend, snap.savingsRate)
+      break
+    }
+
+    case 'upcoming_bills': {
+      const subscriptions = await analytics.getSubscriptions(userId)
+      structuredText = formatUpcomingBills(subscriptions, 0)
+      break
+    }
+
+    default: {
+      // Conversational AI fallback — answers anything using full financial context
+      if (anthropicApiKey) {
+        const snapshot = await analytics.getFinancialSnapshot(userId)
+        const aiAnswer = await answerWithAI(message, snapshot, anthropicApiKey)
+        if (aiAnswer) return aiAnswer
+      }
       return STATIC_UNKNOWN
+    }
   }
 
   if (anthropicApiKey) {
