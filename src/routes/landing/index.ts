@@ -797,54 +797,54 @@ function landingHtml(): string {
 
 <script>
 // ── Demo chat tabs ─────────────────────────────────────────────────────────
-const chats = [
+var chats = [
   [
-    { role:'user', text:'How much did I spend on eating out this month?' },
-    { role:'bot', text:'You\'ve spent <strong>£312</strong> eating out in June across 18 transactions.\n\n• Dishoom: £48\n• Deliveroo: £67\n• Pret a Manger: £34\n• Other: £163\n\nThat\'s £89 more than last month. 📈' },
+    {role:"user", text:"How much did I spend on eating out this month?"},
+    {role:"bot", text:"You've spent <strong>£312</strong> eating out in June across 18 transactions.<br><br>• Dishoom: £48<br>• Deliveroo: £67<br>• Pret a Manger: £34<br>• Other: £163<br><br>That's £89 more than last month. 📈"},
   ],
   [
-    { role:'user', text:'Can I afford a £400k mortgage?' },
-    { role:'bot', text:'Based on your average monthly income of <strong>£4,200</strong>, typical lenders would offer £201k–£226k (4–4.5× salary).\n\nA £400k mortgage would likely be a stretch:\n• Est. monthly repayment: £2,147 (25yr, ~5%)\n• Your disposable income: £1,890\n• Repayment would exceed disposable by £257/mo ⚠️' },
+    {role:"user", text:"Can I afford a £400k mortgage?"},
+    {role:"bot", text:"Based on your average monthly income of <strong>£4,200</strong>, typical lenders would offer £201k–£226k (4–4.5× salary).<br><br>A £400k mortgage would likely be a stretch:<br>• Est. monthly repayment: £2,147 (25yr, ~5%)<br>• Your disposable income: £1,890<br>• Repayment would exceed disposable by £257/mo ⚠️"},
   ],
   [
-    { role:'user', text:'What subscriptions am I paying for?' },
-    { role:'bot', text:'You have <strong>6 active subscriptions</strong>:\n\n• Netflix: £17.99/month\n• Spotify: £10.99/month\n• Amazon Prime: £8.99/month\n• Gym: £35.00/month\n• iCloud: £2.99/month\n• Disney+: £4.99/month\n\nTotal: <strong>£80.95/month</strong>' },
+    {role:"user", text:"What subscriptions am I paying for?"},
+    {role:"bot", text:"You have <strong>6 active subscriptions</strong>:<br><br>• Netflix: £17.99/month<br>• Spotify: £10.99/month<br>• Amazon Prime: £8.99/month<br>• Gym: £35.00/month<br>• iCloud: £2.99/month<br>• Disney+: £4.99/month<br><br>Total: <strong>£80.95/month</strong>"},
   ],
   [
-    { role:'user', text:'How much can I safely spend this weekend?' },
-    { role:'bot', text:'Safe to spend this weekend: <strong>£347</strong>\n\n• Current balance: £1,842\n• Bills due in 3 days: £1,445\n• Buffer kept: £50\n\nEnjoy your weekend! 🎉' },
+    {role:"user", text:"How much can I safely spend this weekend?"},
+    {role:"bot", text:"Safe to spend this weekend: <strong>£347</strong><br><br>• Current balance: £1,842<br>• Bills due in 3 days: £1,445<br>• Buffer kept: £50<br><br>Enjoy your weekend! 🎉"},
   ],
 ];
 
 function showChat(idx, el) {
-  document.querySelectorAll('.dc-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  const body = document.getElementById('chat-body');
-  body.innerHTML = '';
-  chats[idx].forEach(m => {
-    const div = document.createElement('div');
-    div.className = 'dc-msg ' + m.role;
-    div.innerHTML = m.text.replace(/\n/g,'<br>') + (m.role==='user' ? '<span class="tick">✓✓</span>' : '');
+  document.querySelectorAll(".dc-tab").forEach(function(t){ t.classList.remove("active"); });
+  el.classList.add("active");
+  var body = document.getElementById("chat-body");
+  body.innerHTML = "";
+  chats[idx].forEach(function(m) {
+    var div = document.createElement("div");
+    div.className = "dc-msg " + m.role;
+    div.innerHTML = m.text + (m.role==="user" ? '<span class="tick">✓✓</span>' : "");
     body.appendChild(div);
   });
 }
-showChat(0, document.querySelector('.dc-tab'));
+showChat(0, document.querySelector(".dc-tab"));
 
 // ── Typewriter ─────────────────────────────────────────────────────────────
-const phrases = [
-  'How much did I spend this month?',
-  'Can I afford a £400k mortgage?',
-  'What subscriptions am I paying for?',
-  'Safe to spend this weekend?',
-  'When do I get paid next?',
-  'Any unusual transactions?',
-  'What\\'s my balance right now?',
-  'Am I saving enough?',
+var phrases = [
+  "How much did I spend this month?",
+  "Can I afford a £400k mortgage?",
+  "What subscriptions am I paying for?",
+  "Safe to spend this weekend?",
+  "When do I get paid next?",
+  "Any unusual transactions?",
+  "What is my balance right now?",
+  "Am I saving enough?",
 ];
-let phraseIdx = 0, charIdx = 0, deleting = false;
-const tw = document.getElementById('typewriter');
+var phraseIdx = 0, charIdx = 0, deleting = false;
+var tw = document.getElementById("typewriter");
 function typeLoop() {
-  const phrase = phrases[phraseIdx];
+  var phrase = phrases[phraseIdx];
   if (!deleting) {
     charIdx++;
     tw.textContent = phrase.slice(0, charIdx);
