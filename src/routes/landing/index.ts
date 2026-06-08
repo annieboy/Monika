@@ -381,6 +381,8 @@ function landingHtml(): string {
     .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
     .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes typingDot { 0%,60%,100%{transform:translateY(0);background:#aaa}30%{transform:translateY(-5px);background:#555} }
+    .chip { display: inline-block; background: #e8f5e9; color: #1a6b3c; border: 1px solid #a8d5b5; border-radius: 16px; padding: 3px 10px; font-size: 0.72rem; margin: 2px 2px; cursor: default; white-space: nowrap; }
+    .send-flash { background: #128C7E !important; transform: scale(1.25) !important; transition: transform 0.1s, background 0.1s; }
 
     /* ── Responsive ───────────────────────────────────── */
     @media (max-width: 1024px) {
@@ -867,119 +869,111 @@ setTimeout(typeLoop, 800);
 
 // ── Hero phone animation ───────────────────────────────────────────────────
 (function() {
-  var heroBody = document.getElementById('hero-phone-body');
-  var heroInput = document.getElementById('hero-input');
-  var heroSend = document.getElementById('hero-send');
+  var heroBody = document.getElementById("hero-phone-body");
+  var heroInput = document.getElementById("hero-input");
+  var heroSend = document.getElementById("hero-send");
 
-  var convo = [
-    { type:'user', text:'Hello' },
-    { type:'bot', lines:[
-      'Welcome to Monika! 👋 I am your AI-powered UK finance assistant.',
-      '',
-      'I can help with:',
-      '• Spending &amp; balances',
-      '• Subscriptions &amp; bills',
-      '• Mortgage affordability',
-      '• Safe-to-spend amounts',
-      '',
-      'Say <b>connect my bank</b> to get started.'
-    ]},
-    { type:'user', text:'When is my next direct debit?' },
-    { type:'bot', lines:[
-      '📅 <b>Upcoming direct debits:</b>',
-      '',
-      '• <b>Rent — £1,200</b> due in 3 days',
-      '• Council Tax — £142 on 1st',
-      '• Netflix — £17.99 on 14th',
-      '',
-      '⚠️ Balance: <b>£1,187</b>. After rent you will have <b>–£13</b>.',
-      'Your balance will be too low — top up before the 1st.'
-    ]},
-    { type:'user', text:'Can I afford a £400k mortgage?' },
-    { type:'bot', lines:[
-      '🏠 Based on your income of <b>£4,200/mo</b>:',
-      '',
-      '• Lender max (4–4.5×): £201k–£226k',
-      '• Est. repayment: <b>£2,147/mo</b>',
-      '• Your disposable: <b>£1,890/mo</b>',
-      '',
-      '⚠️ A £400k mortgage is a stretch — repayment exceeds your disposable income by £257/mo.'
-    ]}
+  // Each step: type:"user" has text; type:"bot" has html (already formatted, no escaping)
+  var steps = [
+    {
+      type: "user",
+      text: "Hello"
+    },
+    {
+      type: "bot",
+      html: "<strong>Monika</strong>Hi there! 👋 I am <b>Monika</b>, your AI-powered UK finance assistant.<br><br>What can I do for you today?<br><br><span class=\"chip\">💳 Check balances</span> <span class=\"chip\">📅 Upcoming bills</span> <span class=\"chip\">🏠 Mortgage check</span> <span class=\"chip\">📊 Spending review</span><br><span class=\"chip\">🔁 Subscriptions</span> <span class=\"chip\">💰 Safe to spend</span>"
+    },
+    {
+      type: "user",
+      text: "When is my next direct debit?"
+    },
+    {
+      type: "bot",
+      html: "<strong>Monika</strong>📅 <b>Upcoming direct debits:</b><br><br>• <b>Rent — £1,200</b> &nbsp;due in 3 days<br>• Council Tax — £142 &nbsp;on 1st<br>• Netflix — £17.99 &nbsp;on 14th<br><br>⚠️ <b>Warning:</b> Your balance is <b>£1,187</b>. After rent you will have <b>–£13</b> — you will be overdrawn. Top up before the 1st."
+    },
+    {
+      type: "user",
+      text: "Can I afford a £400k mortgage?"
+    },
+    {
+      type: "bot",
+      html: "<strong>Monika</strong>🏠 Based on your income of <b>£4,200/mo</b>:<br><br>• Lender max (4–4.5×): <b>£201k – £226k</b><br>• Est. monthly repayment: <b>£2,147/mo</b><br>• Your disposable income: <b>£1,890/mo</b><br><br>⚠️ A £400k mortgage is a stretch — repayments would exceed your disposable income by <b>£257/mo</b>. Consider a lower amount or increasing your income first."
+    }
   ];
 
-  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
-  function nowTime(){
-    return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  function nowTime() {
+    return new Date().toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
   }
 
-  function makeUserMsg(text){
-    var d = document.createElement('div');
-    d.className = 'msg user msg-anim';
-    d.innerHTML = text + '<div class="msg-time">' + nowTime() + ' ✓✓</div>';
+  function appendUserMsg(text) {
+    var d = document.createElement("div");
+    d.className = "msg user msg-anim";
+    d.innerHTML = text + "<div class=\"msg-time\">" + nowTime() + " ✓✓</div>";
+    heroBody.appendChild(d);
+    heroBody.scrollTop = heroBody.scrollHeight;
+  }
+
+  function appendBotMsg(html) {
+    var d = document.createElement("div");
+    d.className = "msg bot msg-anim";
+    d.innerHTML = html + "<div class=\"msg-time\">" + nowTime() + "</div>";
+    heroBody.appendChild(d);
+    heroBody.scrollTop = heroBody.scrollHeight;
+  }
+
+  function appendTyping() {
+    var d = document.createElement("div");
+    d.className = "typing-indicator msg-anim";
+    d.id = "hero-typing";
+    d.innerHTML = "<span></span><span></span><span></span>";
+    heroBody.appendChild(d);
+    heroBody.scrollTop = heroBody.scrollHeight;
     return d;
   }
 
-  function makeBotMsg(lines){
-    var d = document.createElement('div');
-    d.className = 'msg bot msg-anim';
-    d.innerHTML = '<strong>Monika</strong>' + lines.join('<br>') + '<div class="msg-time">' + nowTime() + '</div>';
-    return d;
-  }
-
-  function makeTyping(){
-    var d = document.createElement('div');
-    d.className = 'typing-indicator';
-    d.innerHTML = '<span></span><span></span><span></span>';
-    return d;
-  }
-
-  async function typeInput(text){
-    heroInput.value = '';
-    heroInput.placeholder = '';
-    for(var i=0;i<text.length;i++){
+  async function typeInput(text) {
+    heroInput.value = "";
+    heroInput.placeholder = "";
+    for (var i = 0; i < text.length; i++) {
       heroInput.value += text[i];
-      await sleep(50 + Math.random()*45);
+      await sleep(55 + Math.random() * 50);
     }
-    heroSend.style.background = '#128C7E';
-    heroSend.style.transform = 'scale(1.2)';
-    await sleep(180);
-    heroSend.style.background = '';
-    heroSend.style.transform = '';
-    heroInput.value = '';
-    heroInput.placeholder = 'Message';
+    // Flash send button
+    heroSend.classList.add("send-flash");
+    await sleep(200);
+    heroSend.classList.remove("send-flash");
+    heroInput.value = "";
+    heroInput.placeholder = "Message";
   }
 
-  async function run(){
-    await sleep(600);
-    while(true){
-      heroBody.innerHTML = '';
-      for(var s=0;s<convo.length;s++){
-        var step = convo[s];
-        if(step.type === 'user'){
+  async function runLoop() {
+    await sleep(800);
+    while (true) {
+      heroBody.innerHTML = "";
+      for (var i = 0; i < steps.length; i++) {
+        var step = steps[i];
+        if (step.type === "user") {
           await typeInput(step.text);
-          await sleep(120);
-          var m = makeUserMsg(step.text);
-          heroBody.appendChild(m);
-          heroBody.scrollTop = heroBody.scrollHeight;
-          await sleep(500);
+          await sleep(100);
+          appendUserMsg(step.text);
+          await sleep(600);
         } else {
-          var ty = makeTyping();
-          heroBody.appendChild(ty);
-          heroBody.scrollTop = heroBody.scrollHeight;
-          var delay = Math.min(1000 + step.lines.join('').length * 10, 2800);
-          await sleep(delay);
+          var ty = appendTyping();
+          // Typing delay proportional to message length, capped
+          var typingDelay = Math.min(900 + step.html.replace(/<[^>]+>/g,"").length * 12, 3000);
+          await sleep(typingDelay);
           ty.remove();
-          var bm = makeBotMsg(step.lines);
-          heroBody.appendChild(bm);
-          heroBody.scrollTop = heroBody.scrollHeight;
-          await sleep(4000);
+          appendBotMsg(step.html);
+          await sleep(3800);
         }
       }
-      await sleep(1500);
+      await sleep(1200);
     }
   }
-  run();
+
+  runLoop();
 })();
 </script>
 
