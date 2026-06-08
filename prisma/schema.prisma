@@ -105,8 +105,9 @@ model User {
   whatsappWabaId    String @map("whatsapp_waba_id") @db.VarChar(64)
 
   // Encrypted PII — AES-256-GCM, application-layer encryption
-  fullNameEnc Bytes? @map("full_name_enc")
-  emailEnc    Bytes? @map("email_enc")
+  whatsappPhoneEnc Bytes? @map("whatsapp_phone_enc")
+  fullNameEnc      Bytes? @map("full_name_enc")
+  emailEnc         Bytes? @map("email_enc")
 
   // Onboarding state
   onboardingStatus OnboardingStatus @default(pending) @map("onboarding_status")

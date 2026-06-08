@@ -5,6 +5,7 @@ import { successPage, failurePage } from '../../services/onboarding/pages.js'
 import { createMockConnection, resolveProvider } from '../../banking/connection.js'
 import { encodeOAuthState } from '../../banking/oauth-state.js'
 import { config } from '../../config.js'
+import { sendBankConnectedNotification } from '../../services/whatsapp/notify.js'
 
 interface StartQuery {
   token?: string
@@ -107,6 +108,10 @@ const bankingStartRoute: FastifyPluginAsync = async (app: FastifyInstance) => {
           { userId, connectionId: connection.id, ...syncResult },
           'Mock bank connection completed via consent flow',
         )
+
+        sendBankConnectedNotification(prisma, userId, syncResult).catch((err: unknown) => {
+          request.log.error({ err, userId }, 'Failed to send bank-connected WhatsApp notification')
+        })
 
         return reply
           .status(200)

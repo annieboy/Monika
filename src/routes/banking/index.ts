@@ -5,6 +5,7 @@ import { logConsentEvent } from '../../services/onboarding/audit.js'
 import { successPage, failurePage } from '../../services/onboarding/pages.js'
 import { config } from '../../config.js'
 import bankingStartRoute from './start.js'
+import { sendBankConnectedNotification } from '../../services/whatsapp/notify.js'
 
 interface ConnectQuery {
   userId?: string
@@ -159,6 +160,10 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           { userId, connectionId: connection.id, ...syncResult },
           'TrueLayer bank connection completed',
         )
+
+        sendBankConnectedNotification(prisma, userId, syncResult).catch((err: unknown) => {
+          request.log.error({ err, userId }, 'Failed to send bank-connected WhatsApp notification')
+        })
 
         return reply
           .status(200)
