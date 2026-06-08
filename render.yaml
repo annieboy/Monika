@@ -6,8 +6,8 @@ services:
     name: monika
     runtime: docker
     dockerfilePath: ./Dockerfile
-    region: london
-    plan: starter
+    region: frankfurt
+    plan: free
 
     healthCheckPath: /health
 
@@ -61,13 +61,13 @@ services:
 
   - type: redis
     name: monika-redis
-    region: london
-    plan: starter
+    region: frankfurt
+    plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
 databases:
   - name: monika-db
     databaseName: monika
-    region: london
-    plan: starter
+    region: frankfurt
+    plan: free
