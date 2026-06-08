@@ -382,6 +382,7 @@ function landingHtml(): string {
     .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes typingDot { 0%,60%,100%{transform:translateY(0);background:#aaa}30%{transform:translateY(-5px);background:#555} }
     .chip { display: inline-block; background: #e8f5e9; color: #1a6b3c; border: 1px solid #a8d5b5; border-radius: 16px; padding: 3px 10px; font-size: 0.72rem; margin: 2px 2px; cursor: default; white-space: nowrap; }
+    .chip-row { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
     .send-flash { background: #128C7E !important; transform: scale(1.25) !important; transition: transform 0.1s, background 0.1s; }
 
     /* ── Responsive ───────────────────────────────────── */
@@ -452,7 +453,7 @@ function landingHtml(): string {
       </a>
       <a href="#how-it-works" class="btn-secondary">See how it works →</a>
     </div>
-    <p class="hero-number">WhatsApp <strong>${WHATSAPP_NUMBER}</strong></p>
+    <p class="hero-number">Available on WhatsApp</p>
   </div>
 
   <!-- Phone mockup -->
@@ -761,8 +762,7 @@ function landingHtml(): string {
     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
     Open WhatsApp — Chat with Monika
   </a>
-  <p class="cta-note">Or save the number and message us directly</p>
-  <p class="cta-number">${WHATSAPP_NUMBER}</p>
+  <p class="cta-note">Available directly on WhatsApp</p>
 </div>
 </div>
 
@@ -790,7 +790,7 @@ function landingHtml(): string {
   <div class="footer-col">
     <h4>Contact</h4>
     <a href="mailto:bezl@firstguide.co.uk">bezl@firstguide.co.uk</a>
-    <a href="${WHATSAPP_LINK}" target="_blank">WhatsApp ${WHATSAPP_NUMBER}</a>
+    <a href="${WHATSAPP_LINK}" target="_blank">Chat on WhatsApp</a>
   </div>
 </footer>
 <div class="footer-bottom">
@@ -869,104 +869,85 @@ setTimeout(typeLoop, 800);
 
 // ── Hero phone animation ───────────────────────────────────────────────────
 (function() {
-  var heroBody = document.getElementById("hero-phone-body");
-  var heroInput = document.getElementById("hero-input");
-  var heroSend = document.getElementById("hero-send");
-
-  // Each step: type:"user" has text; type:"bot" has html (already formatted, no escaping)
-  var steps = [
-    {
-      type: "user",
-      text: "Hello"
-    },
-    {
-      type: "bot",
-      html: "<strong>Monika</strong>Hi there! 👋 I am <b>Monika</b>, your AI-powered UK finance assistant.<br><br>What can I do for you today?<br><br><span class=\"chip\">💳 Check balances</span> <span class=\"chip\">📅 Upcoming bills</span> <span class=\"chip\">🏠 Mortgage check</span> <span class=\"chip\">📊 Spending review</span><br><span class=\"chip\">🔁 Subscriptions</span> <span class=\"chip\">💰 Safe to spend</span>"
-    },
-    {
-      type: "user",
-      text: "When is my next direct debit?"
-    },
-    {
-      type: "bot",
-      html: "<strong>Monika</strong>📅 <b>Upcoming direct debits:</b><br><br>• <b>Rent — £1,200</b> &nbsp;due in 3 days<br>• Council Tax — £142 &nbsp;on 1st<br>• Netflix — £17.99 &nbsp;on 14th<br><br>⚠️ <b>Warning:</b> Your balance is <b>£1,187</b>. After rent you will have <b>–£13</b> — you will be overdrawn. Top up before the 1st."
-    },
-    {
-      type: "user",
-      text: "Can I afford a £400k mortgage?"
-    },
-    {
-      type: "bot",
-      html: "<strong>Monika</strong>🏠 Based on your income of <b>£4,200/mo</b>:<br><br>• Lender max (4–4.5×): <b>£201k – £226k</b><br>• Est. monthly repayment: <b>£2,147/mo</b><br>• Your disposable income: <b>£1,890/mo</b><br><br>⚠️ A £400k mortgage is a stretch — repayments would exceed your disposable income by <b>£257/mo</b>. Consider a lower amount or increasing your income first."
-    }
-  ];
+  var heroBody = document.getElementById('hero-phone-body');
+  var heroInput = document.getElementById('hero-input');
+  var heroSend = document.getElementById('hero-send');
+  var steps = JSON.parse(document.getElementById('hero-convo-data').textContent);
 
   function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
   function nowTime() {
-    return new Date().toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
+    return new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
   }
 
   function appendUserMsg(text) {
-    var d = document.createElement("div");
-    d.className = "msg user msg-anim";
-    d.innerHTML = text + "<div class=\"msg-time\">" + nowTime() + " ✓✓</div>";
+    var d = document.createElement('div');
+    d.className = 'msg user msg-anim';
+    d.innerHTML = text + '<div class="msg-time">' + nowTime() + ' ✓✓</div>';
     heroBody.appendChild(d);
     heroBody.scrollTop = heroBody.scrollHeight;
   }
 
-  function appendBotMsg(html) {
-    var d = document.createElement("div");
-    d.className = "msg bot msg-anim";
-    d.innerHTML = html + "<div class=\"msg-time\">" + nowTime() + "</div>";
+  function appendBotMsg(parts) {
+    var d = document.createElement('div');
+    d.className = 'msg bot msg-anim';
+    var inner = '<strong>Monika</strong>';
+    parts.forEach(function(p) {
+      if (p.type === 'text') {
+        inner += p.value;
+      } else if (p.type === 'chips') {
+        inner += '<div class="chip-row">';
+        p.items.forEach(function(c) { inner += '<span class="chip">' + c + '</span>'; });
+        inner += '</div>';
+      }
+    });
+    inner += '<div class="msg-time">' + nowTime() + '</div>';
+    d.innerHTML = inner;
     heroBody.appendChild(d);
     heroBody.scrollTop = heroBody.scrollHeight;
   }
 
   function appendTyping() {
-    var d = document.createElement("div");
-    d.className = "typing-indicator msg-anim";
-    d.id = "hero-typing";
-    d.innerHTML = "<span></span><span></span><span></span>";
+    var d = document.createElement('div');
+    d.className = 'typing-indicator msg-anim';
+    d.innerHTML = '<span></span><span></span><span></span>';
     heroBody.appendChild(d);
     heroBody.scrollTop = heroBody.scrollHeight;
     return d;
   }
 
   async function typeInput(text) {
-    heroInput.value = "";
-    heroInput.placeholder = "";
+    heroInput.value = '';
+    heroInput.placeholder = '';
     for (var i = 0; i < text.length; i++) {
       heroInput.value += text[i];
       await sleep(55 + Math.random() * 50);
     }
-    // Flash send button
-    heroSend.classList.add("send-flash");
-    await sleep(200);
-    heroSend.classList.remove("send-flash");
-    heroInput.value = "";
-    heroInput.placeholder = "Message";
+    heroSend.classList.add('send-flash');
+    await sleep(220);
+    heroSend.classList.remove('send-flash');
+    heroInput.value = '';
+    heroInput.placeholder = 'Message';
   }
 
   async function runLoop() {
     await sleep(800);
     while (true) {
-      heroBody.innerHTML = "";
+      heroBody.innerHTML = '';
       for (var i = 0; i < steps.length; i++) {
         var step = steps[i];
-        if (step.type === "user") {
+        if (step.type === 'user') {
           await typeInput(step.text);
           await sleep(100);
           appendUserMsg(step.text);
           await sleep(600);
         } else {
           var ty = appendTyping();
-          // Typing delay proportional to message length, capped
-          var typingDelay = Math.min(900 + step.html.replace(/<[^>]+>/g,"").length * 12, 3000);
-          await sleep(typingDelay);
+          var textLen = step.parts.map(function(p) { return p.type === 'text' ? p.value.length : 20; }).reduce(function(a,b){return a+b;},0);
+          await sleep(Math.min(900 + textLen * 10, 3000));
           ty.remove();
-          appendBotMsg(step.html);
-          await sleep(3800);
+          appendBotMsg(step.parts);
+          await sleep(4000);
         }
       }
       await sleep(1200);
@@ -975,6 +956,24 @@ setTimeout(typeLoop, 800);
 
   runLoop();
 })();
+</script>
+
+<script type="application/json" id="hero-convo-data">
+[
+  {"type":"user","text":"Hello"},
+  {"type":"bot","parts":[
+    {"type":"text","value":"Hi there! 👋 I am <b>Monika</b>, your AI-powered UK finance assistant.<br><br>What can I do for you today?<br>"},
+    {"type":"chips","items":["💳 Check balances","📅 Upcoming bills","🏠 Mortgage check","📊 Spending review","🔁 Subscriptions","💰 Safe to spend"]}
+  ]},
+  {"type":"user","text":"When is my next direct debit?"},
+  {"type":"bot","parts":[
+    {"type":"text","value":"📅 <b>Upcoming direct debits:</b><br><br>• <b>Rent — £1,200</b> &nbsp;due in 3 days<br>• Council Tax — £142 &nbsp;on 1st<br>• Netflix — £17.99 &nbsp;on 14th<br><br>⚠️ <b>Warning:</b> Your balance is <b>£1,187</b>. After rent you will have <b>–£13</b> — you will be overdrawn. Top up before the 1st."}
+  ]},
+  {"type":"user","text":"Can I afford a £400k mortgage?"},
+  {"type":"bot","parts":[
+    {"type":"text","value":"🏠 Based on your income of <b>£4,200/mo</b>:<br><br>• Lender max (4–4.5×): <b>£201k – £226k</b><br>• Est. monthly repayment: <b>£2,147/mo</b><br>• Your disposable income: <b>£1,890/mo</b><br><br>⚠️ A £400k mortgage is a stretch — repayments exceed your disposable income by <b>£257/mo</b>. Consider a lower amount first."}
+  ]}
+]
 </script>
 
 </body>
