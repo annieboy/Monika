@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../../services/agent/classifier.js', () => ({
-  classifyIntent: vi.fn().mockResolvedValue({ intent: 'spending_analysis', confidence: 0.95, method: 'rules' }),
+  classifyIntent: vi.fn().mockResolvedValue({ intent: 'spending_analysis', confidence: 'high', method: 'rules' }),
 }))
 vi.mock('../../../services/agent/router.js', () => ({
   routeIntent: vi.fn().mockResolvedValue('You spent £200 on groceries.'),
@@ -50,7 +50,7 @@ describe('POST /chat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Re-apply default mock implementations after clearAllMocks
-    vi.mocked(classifyIntent).mockResolvedValue({ intent: 'spending_analysis', confidence: 0.95, method: 'rules' })
+    vi.mocked(classifyIntent).mockResolvedValue({ intent: 'spending_analysis', confidence: 'high', method: 'rules' })
     vi.mocked(routeIntent).mockResolvedValue('You spent £200 on groceries.')
     vi.mocked(requireAdminAuth).mockReturnValue(true)
   })
@@ -118,7 +118,7 @@ describe('POST /chat', () => {
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body) as Record<string, unknown>
     expect(body.intent).toBe('spending_analysis')
-    expect(body.confidence).toBe(0.95)
+    expect(body.confidence).toBe('high')
     expect(body.method).toBe('rules')
   })
 

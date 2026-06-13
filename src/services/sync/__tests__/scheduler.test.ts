@@ -55,7 +55,7 @@ function makeConnection(id: string, withRefresh = false) {
     userId: `user-${id}`,
     accessTokenEnc: Buffer.from('encrypted-access'),
     refreshTokenEnc: withRefresh ? Buffer.from('encrypted-refresh') : null,
-    tokenExpiresAt: null,
+    tokenExpiresAt: null as Date | null,
     consentScopes: ['accounts', 'transactions'],
     providerConsentId: `consent-${id}`,
   }

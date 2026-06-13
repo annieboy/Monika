@@ -18,7 +18,7 @@ describe('loadConfig', () => {
   })
 
   it('exits with code 1 when DATABASE_URL is missing', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
       throw new Error('process.exit(1)')
     })
 
@@ -29,7 +29,7 @@ describe('loadConfig', () => {
   })
 
   it('exits with code 1 when NODE_ENV is invalid', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
       throw new Error('process.exit(1)')
     })
 
@@ -41,7 +41,7 @@ describe('loadConfig', () => {
   })
 
   it('exits with code 1 in production when ENCRYPTION_KEY is empty', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
       throw new Error('process.exit(1)')
     })
 
@@ -56,7 +56,7 @@ describe('loadConfig', () => {
   })
 
   it('exits with code 1 in production when ADMIN_PASSWORD is the default', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
       throw new Error('process.exit(1)')
     })
 
@@ -71,7 +71,7 @@ describe('loadConfig', () => {
   })
 
   it('exits with code 1 in production when SECRET_KEY is too short', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
       throw new Error('process.exit(1)')
     })
 

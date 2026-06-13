@@ -177,7 +177,7 @@ describe('detectRecurringPayments', () => {
     const prisma = buildPrisma(txns)
     const result = await detectRecurringPayments(prisma, 'user-1')
     expect(result).toBe(1)
-    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0]![0]
     // The merchant name used for grouping/display should come from merchantNameClean
     expect(upsertCall.create.merchantName).toBe('Netflix')
   })
@@ -190,7 +190,7 @@ describe('detectRecurringPayments', () => {
     const prisma = buildPrisma(txns)
     const result = await detectRecurringPayments(prisma, 'user-1')
     expect(result).toBe(1)
-    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0]![0]
     // merchantSlug is derived from rawDescription
     expect(upsertCall.create.merchantSlug).toBeTruthy()
   })

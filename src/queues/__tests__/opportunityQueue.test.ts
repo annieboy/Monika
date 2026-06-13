@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
 const mockUpsertJobScheduler = vi.fn().mockResolvedValue(undefined)
 const mockQueue = { upsertJobScheduler: mockUpsertJobScheduler, add: vi.fn() }
@@ -11,8 +11,16 @@ vi.mock('../connection.js', () => ({
   createRedisConnection: vi.fn().mockReturnValue('redis://localhost:6379'),
 }))
 
-// Import after mocks are set up
-const { getOpportunityQueue, scheduleRecurringJobs } = await import('../opportunityQueue.js')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let getOpportunityQueue: any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let scheduleRecurringJobs: any
+
+beforeAll(async () => {
+  const mod = await import('../opportunityQueue.js')
+  getOpportunityQueue = mod.getOpportunityQueue
+  scheduleRecurringJobs = mod.scheduleRecurringJobs
+})
 
 describe('getOpportunityQueue', () => {
   beforeEach(() => {
