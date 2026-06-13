@@ -198,7 +198,7 @@ describe('deliverOpportunitiesToUser', () => {
     await deliverOpportunitiesToUser(prisma, USER_ID)
 
     expect(prisma.$transaction).toHaveBeenCalledOnce()
-    const txCalls = vi.mocked(prisma.$transaction).mock.calls[0][0] as unknown[]
+    const txCalls = vi.mocked(prisma.$transaction).mock.calls[0]![0] as unknown as unknown[]
     // Two operations passed as array to $transaction
     expect(txCalls).toHaveLength(2)
   })

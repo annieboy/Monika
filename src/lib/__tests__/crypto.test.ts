@@ -54,7 +54,7 @@ describe('encrypt / decrypt', () => {
     const plain = Buffer.from('sensitive data')
     const ciphertext = encrypt(plain, HEX_KEY_64)
     // Flip last byte of auth tag
-    ciphertext[ciphertext.length - 1] ^= 0xff
+    ciphertext[ciphertext.length - 1]! ^= 0xff
     expect(() => decrypt(ciphertext, HEX_KEY_64)).toThrow()
   })
 
@@ -62,7 +62,7 @@ describe('encrypt / decrypt', () => {
     const plain = Buffer.from('sensitive data')
     const ciphertext = encrypt(plain, HEX_KEY_64)
     // Flip byte in ciphertext body (after nonce, before tag)
-    ciphertext[12] ^= 0x01
+    ciphertext[12]! ^= 0x01
     expect(() => decrypt(ciphertext, HEX_KEY_64)).toThrow()
   })
 

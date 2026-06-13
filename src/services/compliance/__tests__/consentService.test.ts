@@ -66,7 +66,18 @@ describe('isOptOutMessage', () => {
 const FUTURE = new Date(Date.now() + 7 * 86_400_000)
 const PAST = new Date(Date.now() - 7 * 86_400_000)
 
-const BASE_PREFS = {
+interface PrefsShape {
+  opportunitiesConsent: boolean
+  consentWithdrawnAt: Date | null
+  coolingOffUntil: Date | null
+  maxMessagesPerWeek: number
+  maxMessagesPerMonth: number
+  quietHoursStart: string
+  quietHoursEnd: string
+  disabledCategories: string[]
+}
+
+const BASE_PREFS: PrefsShape = {
   opportunitiesConsent: true,
   consentWithdrawnAt: null,
   coolingOffUntil: null,
@@ -74,11 +85,11 @@ const BASE_PREFS = {
   maxMessagesPerMonth: 10,
   quietHoursStart: '21:00',
   quietHoursEnd: '08:00',
-  disabledCategories: [] as string[],
+  disabledCategories: [],
 }
 
 function makePrisma(opts: {
-  prefs?: Partial<typeof BASE_PREFS> | null
+  prefs?: Partial<PrefsShape> | null
   weeklyCount?: number
   monthlyCount?: number
 }): PrismaClient {
@@ -194,7 +205,7 @@ describe('recordOptIn', () => {
     await recordOptIn(prisma, 'user-1', 'whatsapp_yes')
 
     expect(mockUpsert).toHaveBeenCalledOnce()
-    const call = mockUpsert.mock.calls[0][0] as { create: Record<string, unknown>; update: Record<string, unknown> }
+    const call = mockUpsert.mock.calls[0]![0] as { create: Record<string, unknown>; update: Record<string, unknown> }
     expect(call.create.opportunitiesConsent).toBe(true)
     expect(call.create.consentMethod).toBe('whatsapp_yes')
     expect(call.update.opportunitiesConsent).toBe(true)
@@ -210,7 +221,7 @@ describe('recordOptIn', () => {
     } as unknown as PrismaClient
 
     await recordOptIn(prisma, 'user-1')
-    const call = mockUpsert.mock.calls[0][0] as { create: Record<string, unknown> }
+    const call = mockUpsert.mock.calls[0]![0] as { create: Record<string, unknown> }
     expect(call.create.consentMethod).toBe('whatsapp_opt_in')
   })
 })
@@ -229,7 +240,7 @@ describe('recordOptOut', () => {
     const after = Date.now()
 
     expect(mockUpsert).toHaveBeenCalledOnce()
-    const call = mockUpsert.mock.calls[0][0] as { create: Record<string, unknown>; update: Record<string, unknown> }
+    const call = mockUpsert.mock.calls[0]![0] as { create: Record<string, unknown>; update: Record<string, unknown> }
 
     expect(call.create.opportunitiesConsent).toBe(false)
     expect(call.update.opportunitiesConsent).toBe(false)
