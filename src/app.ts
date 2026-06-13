@@ -21,6 +21,7 @@ import { logger } from './logger.js'
 import prismaPlugin from './plugins/prisma.js'
 import healthRoutes from './routes/health.js'
 import whatsappRoutes from './routes/webhooks/whatsapp.js'
+import truelayerRoutes from './routes/webhooks/truelayer.js'
 import bankingRoutes from './routes/banking/index.js'
 import agentRoutes from './routes/agent/index.js'
 import adminRoutes from './routes/admin/index.js'
@@ -94,6 +95,7 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   // ── Routes ─────────────────────────────────────────────────────────────────
   await app.register(healthRoutes)
   await app.register(whatsappRoutes, { prefix: '/webhooks' })
+  await app.register(truelayerRoutes, { prefix: '/webhooks' })
   await app.register(bankingRoutes, { prefix: '/banking' })
   await app.register(agentRoutes, { prefix: '/agent' })
   await app.register(adminRoutes, { prefix: '/admin' })
