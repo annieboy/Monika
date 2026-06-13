@@ -84,6 +84,12 @@ function makeMockPrisma(): PrismaClient {
         createdAt: now,
         updatedAt: now,
       }),
+      // Simulate a fully-onboarded user so onboardingFlow short-circuits
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        fullNameEnc: Buffer.from('Test'),
+        termsAcceptedAt: new Date('2024-01-01'),
+        gdprConsentAt: new Date('2024-01-01'),
+      }),
     },
     conversation: {
       findFirst: vi.fn().mockResolvedValue(null),

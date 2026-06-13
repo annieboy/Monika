@@ -27,6 +27,10 @@ vi.mock('../../conversation/opportunityConversationHandler.js', () => ({
   handleOpportunityReply: vi.fn().mockResolvedValue({ handled: false, response: '' }),
 }))
 
+vi.mock('../../onboarding/onboardingFlow.js', () => ({
+  handleOnboardingStep: vi.fn().mockResolvedValue({ handled: false, response: '' }),
+}))
+
 vi.mock('../../conversation/sessionService.js', () => ({
   getOrCreateSession: vi.fn().mockResolvedValue('session-uuid'),
   loadSessionHistory: vi.fn().mockResolvedValue([]),

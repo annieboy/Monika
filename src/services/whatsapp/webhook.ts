@@ -4,6 +4,7 @@ import { classifyIntent } from '../agent/classifier.js'
 import { routeIntent } from '../agent/router.js'
 import { trackEvent, hasAskedBefore } from '../analytics/events.js'
 import { handleOpportunityReply } from '../conversation/opportunityConversationHandler.js'
+import { handleOnboardingStep } from '../onboarding/onboardingFlow.js'
 import { getOrCreateSession, loadSessionHistory } from '../conversation/sessionService.js'
 import { CONSENT_PROMPT } from '../opportunity/opportunityMessageBuilder.js'
 import { config } from '../../config.js'
@@ -92,6 +93,31 @@ export async function processInboundMessage(
     },
     select: { id: true },
   })
+
+  // Check if the user hasn't completed onboarding (name / terms / GDPR consent).
+  // This runs first — new users must finish onboarding before normal routing.
+  const onboardingResult = await handleOnboardingStep(prisma, user.id, text)
+  if (onboardingResult.handled) {
+    const assistantConversation = await prisma.conversation.create({
+      data: {
+        userId: user.id,
+        sessionId,
+        role: 'assistant',
+        content: onboardingResult.response,
+        modelUsed: 'onboarding',
+      },
+      select: { id: true },
+    })
+    return {
+      userId: user.id,
+      conversationId: userConversation.id,
+      responseConversationId: assistantConversation.id,
+      isNewUser,
+      intent: 'onboarding',
+      response: onboardingResult.response,
+      sessionId,
+    }
+  }
 
   // Check if this is a reply to an active opportunity message or consent flow
   // This runs before intent classification — opportunity replies are stateful
