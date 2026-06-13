@@ -67,6 +67,8 @@ const configSchema = z.object({
   IMPACT_ACCOUNT_SID: z.string().default(''),
   IMPACT_AUTH_TOKEN: z.string().default(''),
   AFFILIATE_POSTBACK_SECRET: z.string().default(''),
+  CJ_POSTBACK_SECRET: z.string().default(''),
+  IMPACT_POSTBACK_SECRET: z.string().default(''),
 })
 
 export type Config = z.infer<typeof configSchema>

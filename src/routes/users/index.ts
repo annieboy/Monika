@@ -214,6 +214,66 @@ const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     },
   )
 
+  // ── GET /users/me/conversations ───────────────────────────────────────────
+  app.get<{ Querystring: { userId: string; limit?: string; offset?: string } }>(
+    '/me/conversations',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId: { type: 'string', format: 'uuid' },
+            limit:  { type: 'string' },
+            offset: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { userId, limit: limitStr, offset: offsetStr } = request.query
+      const prisma = request.server.prisma
+      const limit  = Math.min(parseInt(limitStr  ?? '20', 10), 100)
+      const offset = parseInt(offsetStr ?? '0', 10)
+
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletedAt: true } })
+      if (!user) return reply.status(404).send({ error: 'User not found' })
+      if (user.deletedAt) return reply.status(410).send({ error: 'User data has been deleted' })
+
+      // Return sessions (grouped), not individual messages — one row per session
+      const sessions = await prisma.$queryRaw<{
+        sessionId: string
+        messageCount: number
+        firstAt: Date
+        lastAt: Date
+      }[]>`
+        SELECT
+          session_id       AS "sessionId",
+          COUNT(*)::int    AS "messageCount",
+          MIN(created_at)  AS "firstAt",
+          MAX(created_at)  AS "lastAt"
+        FROM conversations
+        WHERE user_id = ${userId}::uuid
+        GROUP BY session_id
+        ORDER BY MAX(created_at) DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `
+
+      const total = await prisma.conversation.groupBy({
+        by: ['sessionId'],
+        where: { userId },
+        _count: true,
+      })
+
+      return reply.status(200).send({
+        total: total.length,
+        limit,
+        offset,
+        sessions,
+      })
+    },
+  )
+
   // ── GET /users/me/opportunities ───────────────────────────────────────────
   app.get<{ Querystring: { userId: string; limit?: string; offset?: string } }>(
     '/me/opportunities',

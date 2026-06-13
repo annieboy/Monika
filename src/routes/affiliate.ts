@@ -14,13 +14,21 @@
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { recordRedirect, recordPostback } from '../services/affiliate/clickTrackingService.js'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { config } from '../config.js'
 
-function verifyPostbackSignature(body: string, signature: string, secret: string): boolean {
-  if (!secret) return true // if not configured, skip verification in dev
-  const expected = createHmac('sha256', secret).update(body).digest('hex')
-  return expected === signature
+function verifyPostbackSignature(body: string, signature: string | undefined, secret: string): boolean {
+  if (!secret) return true // skip verification when secret not configured (dev only)
+  if (!signature) return false
+  try {
+    const expected = createHmac('sha256', secret).update(body).digest('hex')
+    const a = Buffer.from(expected, 'hex')
+    const b = Buffer.from(signature.replace(/^sha256=/, ''), 'hex')
+    if (a.length !== b.length) return false
+    return timingSafeEqual(a, b)
+  } catch {
+    return false
+  }
 }
 
 const affiliateRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
@@ -105,6 +113,14 @@ const affiliateRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     '/webhooks/affiliate/cj',
     { config: { rateLimit: { max: 200, timeWindow: '1 minute' } } },
     async (request, reply) => {
+      const sig = request.headers['x-cj-signature'] as string | undefined
+      const rawBody = JSON.stringify(request.body)
+
+      if (!verifyPostbackSignature(rawBody, sig, config.CJ_POSTBACK_SECRET)) {
+        request.log.warn('CJ postback: invalid signature')
+        return reply.status(401).send({ error: 'Invalid signature' })
+      }
+
       const { sid, orderId, commissionAmount, actionStatus } = request.body
 
       if (!sid || !orderId) {
@@ -127,6 +143,14 @@ const affiliateRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     '/webhooks/affiliate/impact',
     { config: { rateLimit: { max: 200, timeWindow: '1 minute' } } },
     async (request, reply) => {
+      const sig = request.headers['x-impact-signature'] as string | undefined
+      const rawBody = JSON.stringify(request.body)
+
+      if (!verifyPostbackSignature(rawBody, sig, config.IMPACT_POSTBACK_SECRET)) {
+        request.log.warn('Impact postback: invalid signature')
+        return reply.status(401).send({ error: 'Invalid signature' })
+      }
+
       const { SubId1, OrderId, PubCommissionAmount, ActionStatus } = request.body
 
       if (!SubId1 || !OrderId) {
