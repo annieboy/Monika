@@ -392,6 +392,85 @@ describe('TrueLayerProvider — refreshToken', () => {
   })
 })
 
+describe('TrueLayerProvider — revokeConsent', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('resolves on 200 response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
+    const provider = makeProvider()
+    await expect(provider.revokeConsent('access-tok')).resolves.toBeUndefined()
+  })
+
+  it('throws when response is not ok and status is not 204', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }))
+    const provider = makeProvider()
+    await expect(provider.revokeConsent('access-tok')).rejects.toThrow('TrueLayer revocation failed (403)')
+  })
+
+  it('throws with correct status code in message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    const provider = makeProvider()
+    await expect(provider.revokeConsent('access-tok')).rejects.toThrow('TrueLayer revocation failed (500)')
+  })
+})
+
+describe('TrueLayerProvider — apiFetch retry logic', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  const mockConsent = { providerConsentId: 'c-1', accessToken: 'tok', scopes: [] }
+
+  it('retries on 429 and succeeds on second attempt', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve({ ok: false, status: 429, json: async () => ({}) })
+      }
+      // Second call (retry): accounts list, then balance fetch
+      if (callCount === 2) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ results: [{ account_id: 'acc-1', account_type: 'TRANSACTION', display_name: 'Current', currency: 'GBP' }] }) })
+      }
+      // Balance fetch
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ results: [{ currency: 'GBP', available: 100, current: 200 }] }) })
+    }))
+
+    const provider = makeProvider()
+    // Kick off the call; it will pause at the setTimeout inside apiFetch
+    const promise = provider.getAccounts(mockConsent)
+    // Advance timers past the exponential backoff delay (2^1 * 1000 = 2000ms)
+    await vi.runAllTimersAsync()
+    const accounts = await promise
+    expect(accounts).toHaveLength(1)
+    expect(callCount).toBeGreaterThanOrEqual(2)
+  })
+
+  it('retries on 503 and succeeds on second attempt', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+      }
+      if (callCount === 2) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ results: [] }) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ results: [] }) })
+    }))
+
+    const provider = makeProvider()
+    const promise = provider.getTransactions(mockConsent, 'acc-1', new Date(), new Date())
+    await vi.runAllTimersAsync()
+    const txns = await promise
+    expect(txns).toHaveLength(0)
+    expect(callCount).toBe(2)
+  })
+})
+
 describe('TrueLayerProvider — production environment', () => {
   it('uses production auth URL', async () => {
     const provider = new TrueLayerProvider('id', 'secret', REDIRECT_URI, 'production')
