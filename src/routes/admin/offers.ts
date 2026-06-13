@@ -10,6 +10,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { upsertOffer, type OfferInput } from '../../services/offers/offerUpsertService.js'
+import { importOffersFromCsv } from '../../services/offers/offerImportService.js'
 import { offersListPage } from './pages/offers.js'
 
 interface UpsertOfferBody {
@@ -114,6 +115,30 @@ export async function registerAdminOfferRoutes(app: FastifyInstance): Promise<vo
         action: result.action,
         offerId: result.id,
       })
+    },
+  )
+
+  // ── CSV Import ──────────────────────────────────────────────────────────────
+  // Accepts raw CSV as request body (Content-Type: text/csv or text/plain).
+  // Optional header X-Triggered-By identifies the operator for the audit log.
+  app.post<{ Headers: { 'x-triggered-by'?: string } }>(
+    '/offers/import',
+    {},
+    async (request, reply) => {
+      const contentType = request.headers['content-type'] ?? ''
+      if (!contentType.startsWith('text/csv') && !contentType.startsWith('text/plain')) {
+        return reply.status(415).send({ error: 'Content-Type must be text/csv or text/plain' })
+      }
+
+      const csvText = request.body as string
+      if (!csvText || typeof csvText !== 'string' || csvText.trim().length === 0) {
+        return reply.status(400).send({ error: 'Request body must contain CSV text' })
+      }
+
+      const triggeredBy = request.headers['x-triggered-by']
+      const result = await importOffersFromCsv(request.server.prisma, csvText, triggeredBy)
+      const status = result.errors.length > 0 && result.total === 0 ? 422 : 200
+      return reply.status(status).send(result)
     },
   )
 

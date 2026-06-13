@@ -11,6 +11,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { config } from '../config.js'
 
 // Read version once at startup — avoids repeated filesystem I/O
 function getVersion(): string {
@@ -117,6 +118,23 @@ const healthRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         latencyMs: Date.now() - dbStart,
         // Never leak DB connection details in production
         error: process.env['NODE_ENV'] === 'production' ? 'Database unavailable' : (err instanceof Error ? err.message : 'Unknown error'),
+      }
+    }
+
+    // Redis check
+    const redisStart = Date.now()
+    try {
+      const { Redis } = await import('ioredis')
+      const redis = new Redis(config.REDIS_URL, { connectTimeout: 3000, enableOfflineQueue: false, lazyConnect: true })
+      await redis.connect()
+      await redis.ping()
+      await redis.quit()
+      checks['redis'] = { ok: true, latencyMs: Date.now() - redisStart }
+    } catch (err) {
+      checks['redis'] = {
+        ok: false,
+        latencyMs: Date.now() - redisStart,
+        error: process.env['NODE_ENV'] === 'production' ? 'Redis unavailable' : (err instanceof Error ? err.message : 'Unknown error'),
       }
     }
 
