@@ -139,9 +139,15 @@ export function layout(title: string, body: string, breadcrumbs?: { label: strin
       <a href="/admin/analytics">Analytics</a>
       <div class="section">Users</div>
       <a href="/admin/users">Users</a>
+      <div class="section">Offers</div>
+      <a href="/admin/offers">Offers</a>
+      <a href="/admin/categories">Categories</a>
+      <a href="/admin/opportunities">Opportunities</a>
       <div class="section">Data</div>
       <a href="/admin/transactions">Transactions</a>
       <a href="/admin/audit">Audit Log</a>
+      <div class="section">Support</div>
+      <a href="/admin/conversations">Conversations</a>
     </nav>
     <footer>
       <div>Read-only &middot; MVP</div>

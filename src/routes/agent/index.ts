@@ -15,6 +15,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { classifyIntent } from '../../services/agent/classifier.js'
 import { routeIntent } from '../../services/agent/router.js'
 import { requireAdminAuth } from '../admin/auth.js'
+import { captureException } from '../../lib/monitoring.js'
 import { config } from '../../config.js'
 
 interface ChatBody {
@@ -57,14 +58,22 @@ const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         return reply.status(404).send({ error: 'User not found' })
       }
 
-      const classification = await classifyIntent(message, config.ANTHROPIC_API_KEY)
-      const response = await routeIntent(
-        classification.intent,
-        message,
-        userId,
-        prisma,
-        config.ANTHROPIC_API_KEY,
-      )
+      let classification: Awaited<ReturnType<typeof classifyIntent>>
+      let response: string
+      try {
+        classification = await classifyIntent(message, config.ANTHROPIC_API_KEY)
+        response = await routeIntent(
+          classification.intent,
+          message,
+          userId,
+          prisma,
+          config.ANTHROPIC_API_KEY,
+        )
+      } catch (err) {
+        captureException(err, { userId, message: message.slice(0, 100) })
+        request.log.error({ err, userId }, 'Agent classification/routing failed')
+        return reply.status(500).send({ error: 'Internal server error' })
+      }
 
       const [userMsg, assistantMsg] = await Promise.all([
         prisma.conversation.create({

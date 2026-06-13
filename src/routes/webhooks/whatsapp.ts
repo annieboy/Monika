@@ -15,11 +15,13 @@
  */
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { config } from '../../config.js'
-import { verifyHmacSignature } from '../../lib/crypto.js'
+import { verifyHmacSignature, hashPhoneNumber } from '../../lib/crypto.js'
 import { parseTextMessage, parseStatusUpdates } from '../../services/whatsapp/parser.js'
 import { processInboundMessage } from '../../services/whatsapp/webhook.js'
 import { sendWhatsAppMessage, SendError } from '../../services/whatsapp/sender.js'
 import { processStatusUpdate } from '../../services/whatsapp/status.js'
+import { checkUserRateLimit } from '../../lib/userRateLimit.js'
+import { captureException } from '../../lib/monitoring.js'
 import type { WhatsAppWebhookPayload } from '../../types/whatsapp.js'
 
 interface VerifyQuery {
@@ -150,6 +152,19 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const wabaId =
         payload.entry[0]?.changes[0]?.value.metadata.phone_number_id ?? ''
 
+      // ── 4b. Per-user rate limit ────────────────────────────────────────────
+      // All Meta traffic shares the same source IPs, so IP-level limiting is
+      // useless. Key by phone hash to cap individual users at 10 msg/min.
+      if (config.SECRET_KEY) {
+        const phoneHash = hashPhoneNumber(parsed.from, config.SECRET_KEY)
+        const rateResult = await checkUserRateLimit(phoneHash, config.REDIS_URL)
+        if (!rateResult.allowed) {
+          request.log.warn({ retryAfterSecs: rateResult.retryAfterSecs }, 'Per-user WhatsApp rate limit exceeded')
+          // Return 200 to Meta — a 429 would trigger retries that make the problem worse
+          return reply.status(200).send({ status: 'ok' })
+        }
+      }
+
       // ── 5. Deduplicate + classify + store ──────────────────────────────────
       const result = await processInboundMessage(
         prisma,
@@ -183,6 +198,7 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
             })
           })
           .catch((err: unknown) => {
+            captureException(err, { userId: result.userId })
             if (err instanceof SendError) {
               request.log.error(
                 { err, userId: result.userId, statusCode: err.statusCode },
