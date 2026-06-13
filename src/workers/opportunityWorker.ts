@@ -14,6 +14,7 @@ import { detectRecurringPayments } from '../services/opportunity/recurringPaymen
 import { detectOpportunities } from '../services/opportunity/opportunityDetector.js'
 import { deliverOpportunitiesToUser, runDeliveryBatch } from '../services/opportunity/opportunityDeliveryService.js'
 import { expireStaleOffers } from '../services/offers/offerUpsertService.js'
+import { reconcileCommissions } from '../services/affiliate/reconciliationService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -95,6 +96,11 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
 
         case 'expire-offers':
           return handleExpire(prisma)
+
+        case 'reconcile-commissions': {
+          const result = await reconcileCommissions(prisma)
+          return { processed: result.checked, errors: result.errors }
+        }
 
         default: {
           throw new Error(`Unknown job type: ${String(job.name)}`)

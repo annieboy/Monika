@@ -13,6 +13,7 @@ import { transactionsListPage, transactionDetailPage } from './pages/transaction
 import { auditLogPage } from './pages/audit.js'
 import { analyticsPage } from './pages/analytics.js'
 import { registerAdminOfferRoutes } from './offers.js'
+import { opportunityAnalyticsPage } from './pages/opportunityAnalytics.js'
 
 const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── Auth hook — runs before every /admin route ─────────────────────────────
@@ -92,6 +93,12 @@ const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   // ── Offer management ───────────────────────────────────────────────────────
   await registerAdminOfferRoutes(app)
+
+  // ── Opportunity analytics ──────────────────────────────────────────────────
+  app.get('/opportunities', async (_req, reply) => {
+    const html = await opportunityAnalyticsPage(reply.server.prisma)
+    return reply.type('text/html').send(html)
+  })
 }
 
 export default adminRoutes
