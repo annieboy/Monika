@@ -10,6 +10,8 @@ import { logger } from './logger.js'
 import { buildApp } from './app.js'
 import { initMonitoring, flushMonitoring, captureException } from './lib/monitoring.js'
 import { startSyncScheduler } from './services/sync/scheduler.js'
+import { startOpportunityWorker } from './workers/opportunityWorker.js'
+import { scheduleRecurringJobs } from './queues/opportunityQueue.js'
 
 async function start(): Promise<void> {
   await initMonitoring()
@@ -61,6 +63,8 @@ async function start(): Promise<void> {
     )
     if (config.NODE_ENV === 'production') {
       startSyncScheduler(app.prisma)
+      startOpportunityWorker(app.prisma)
+      await scheduleRecurringJobs()
     }
   } catch (err) {
     logger.error({ err }, 'Failed to start server')

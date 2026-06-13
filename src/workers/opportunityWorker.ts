@@ -1,0 +1,124 @@
+/**
+ * Opportunity Engine worker.
+ *
+ * Processes three job types from the opportunity-engine queue:
+ *   detect-opportunities  — runs recurringPaymentDetector + opportunityDetector for user(s)
+ *   deliver-opportunities — runs opportunityDeliveryService for user(s)
+ *   expire-offers         — marks stale offers inactive
+ *
+ * Each job type is idempotent and safe to retry.
+ */
+import { Worker, type Job } from 'bullmq'
+import type { PrismaClient } from '@prisma/client'
+import { detectRecurringPayments } from '../services/opportunity/recurringPaymentDetector.js'
+import { detectOpportunities } from '../services/opportunity/opportunityDetector.js'
+import { deliverOpportunitiesToUser, runDeliveryBatch } from '../services/opportunity/opportunityDeliveryService.js'
+import { expireStaleOffers } from '../services/offers/offerUpsertService.js'
+import { createRedisConnection } from '../queues/connection.js'
+import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
+import { logger } from '../logger.js'
+
+export interface WorkerResult {
+  processed: number
+  errors: number
+}
+
+async function handleDetect(prisma: PrismaClient, userId?: string): Promise<WorkerResult> {
+  if (userId) {
+    await detectRecurringPayments(prisma, userId)
+    await detectOpportunities(prisma, userId)
+    return { processed: 1, errors: 0 }
+  }
+
+  // All users with active bank connections
+  const users = await prisma.user.findMany({
+    where: { bankConnections: { some: { consentStatus: 'active' } } },
+    select: { id: true },
+  })
+
+  let errors = 0
+  for (const user of users) {
+    try {
+      await detectRecurringPayments(prisma, user.id)
+      await detectOpportunities(prisma, user.id)
+    } catch (err) {
+      errors++
+      logger.error({ err, userId: user.id }, 'Detection failed for user')
+    }
+  }
+
+  // Also surface no-bank offers for users without a connection
+  const noBankUsers = await prisma.user.findMany({
+    where: { bankConnections: { none: {} } },
+    select: { id: true },
+  })
+  for (const user of noBankUsers) {
+    try {
+      await detectOpportunities(prisma, user.id)
+    } catch (err) {
+      errors++
+      logger.error({ err, userId: user.id }, 'No-bank detection failed for user')
+    }
+  }
+
+  return { processed: users.length + noBankUsers.length, errors }
+}
+
+async function handleDeliver(prisma: PrismaClient, userId?: string): Promise<WorkerResult> {
+  if (userId) {
+    await deliverOpportunitiesToUser(prisma, userId)
+    return { processed: 1, errors: 0 }
+  }
+  await runDeliveryBatch(prisma, logger)
+  return { processed: -1, errors: 0 } // batch handles its own counting
+}
+
+async function handleExpire(prisma: PrismaClient): Promise<WorkerResult> {
+  const count = await expireStaleOffers(prisma)
+  return { processed: count, errors: 0 }
+}
+
+export function startOpportunityWorker(prisma: PrismaClient): Worker {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const worker = new Worker<any, WorkerResult, string>(
+    OPPORTUNITY_QUEUE,
+    async (job: Job) => {
+      logger.info({ jobId: job.id, name: job.name }, 'Processing opportunity job')
+      const name = job.name as OpportunityJobName
+
+      switch (name) {
+        case 'detect-opportunities':
+          return handleDetect(prisma, (job.data as { userId?: string }).userId)
+
+        case 'deliver-opportunities':
+          return handleDeliver(prisma, (job.data as { userId?: string }).userId)
+
+        case 'expire-offers':
+          return handleExpire(prisma)
+
+        default: {
+          throw new Error(`Unknown job type: ${String(job.name)}`)
+        }
+      }
+    },
+    {
+      connection: createRedisConnection(),
+      concurrency: 2,
+      limiter: { max: 10, duration: 1000 },
+    },
+  )
+
+  worker.on('completed', (job, result) => {
+    logger.info({ jobId: job.id, name: job.name, result }, 'Opportunity job completed')
+  })
+
+  worker.on('failed', (job, err) => {
+    logger.error({ jobId: job?.id, name: job?.name, err }, 'Opportunity job failed')
+  })
+
+  worker.on('error', (err) => {
+    logger.error({ err }, 'Opportunity worker error')
+  })
+
+  return worker
+}
