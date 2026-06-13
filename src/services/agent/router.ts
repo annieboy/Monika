@@ -16,6 +16,7 @@ import {
   polishWithLlm,
 } from '../analytics/formatter.js'
 import { answerWithAI } from './conversational.js'
+import { parseGoalFromMessage, createGoal, listGoals } from '../savings/savingsGoalService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -74,6 +75,18 @@ export async function routeIntent(
 ): Promise<string> {
   // Payment requests — not yet supported
   if (intent === 'payment_request') return PAYMENT_REJECTION
+
+  // Savings goals — handled before bank check (listing works without bank)
+  if (intent === 'savings_goal') {
+    if (/my\s+savings?\s+goals?|how\s+am\s+i\s+doing/i.test(message)) {
+      return listGoals(prisma, userId)
+    }
+    const parsed = parseGoalFromMessage(message)
+    if (!parsed) {
+      return `To set a savings goal, try: *"I want to save £2,000 for a holiday by December"* or *"Save £500/month for a car"*.`
+    }
+    return createGoal(prisma, userId, parsed)
+  }
 
   const analytics = new TransactionAnalyticsService(prisma)
 

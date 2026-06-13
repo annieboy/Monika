@@ -172,6 +172,7 @@ model User {
   opportunities             Opportunity[]
   affiliateClicks           AffiliateClick[]
   opportunityPreferences    UserOpportunityPreferences?
+  savingsGoals              SavingsGoal[]
 
   @@map("users")
 }
@@ -676,6 +677,33 @@ model UserOpportunityPreferences {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   @@map("user_opportunity_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAVINGS GOALS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SavingsGoal {
+  id     String @id @default(cuid())
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name           String    @db.VarChar(128)
+  targetAmount   Decimal   @map("target_amount") @db.Decimal(10, 2)
+  currentAmount  Decimal   @default(0) @map("current_amount") @db.Decimal(10, 2)
+  targetDate     DateTime? @map("target_date") @db.Timestamptz()
+  monthlySavings Decimal?  @map("monthly_savings") @db.Decimal(10, 2)
+
+  // "active" | "achieved" | "paused" | "cancelled"
+  status String @default("active") @db.VarChar(16)
+
+  lastProgressNotifiedAt DateTime? @map("last_progress_notified_at") @db.Timestamptz()
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([userId, status])
+  @@map("savings_goals")
 }
 
 model OfferIngestionRun {

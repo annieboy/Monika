@@ -15,6 +15,7 @@ import { detectOpportunities } from '../services/opportunity/opportunityDetector
 import { deliverOpportunitiesToUser, runDeliveryBatch } from '../services/opportunity/opportunityDeliveryService.js'
 import { expireStaleOffers } from '../services/offers/offerUpsertService.js'
 import { reconcileCommissions } from '../services/affiliate/reconciliationService.js'
+import { runBillReminderBatch } from '../services/reminders/billReminderService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -93,6 +94,11 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
 
         case 'deliver-opportunities':
           return handleDeliver(prisma, (job.data as { userId?: string }).userId)
+
+        case 'bill-reminders': {
+          const result = await runBillReminderBatch(prisma)
+          return { processed: result.reminded, errors: result.errors }
+        }
 
         case 'expire-offers':
           return handleExpire(prisma)
