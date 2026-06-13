@@ -141,4 +141,33 @@ describe('GET /ready', () => {
     const body = JSON.parse(res.body) as { checks: Record<string, { latencyMs: number }> }
     expect(typeof body.checks['database']?.latencyMs).toBe('number')
   })
+
+  it('returns 503 when Redis is unreachable', async () => {
+    const { Redis } = await import('ioredis')
+    vi.mocked(Redis).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        ping: vi.fn(),
+        quit: vi.fn(),
+      }
+    } as never)
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/ready' })
+    expect(res.statusCode).toBe(503)
+  })
+
+  it('marks redis check ok:false when Redis fails', async () => {
+    const { Redis } = await import('ioredis')
+    vi.mocked(Redis).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        ping: vi.fn(),
+        quit: vi.fn(),
+      }
+    } as never)
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/ready' })
+    const body = JSON.parse(res.body) as { checks: Record<string, { ok: boolean }> }
+    expect(body.checks['redis']?.ok).toBe(false)
+  })
 })

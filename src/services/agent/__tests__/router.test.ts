@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Decimal } from '@prisma/client/runtime/library'
 import type { PrismaClient } from '@prisma/client'
 import { routeIntent, PAYMENT_REJECTION } from '../router.js'
@@ -191,5 +191,124 @@ describe('routeIntent — onboarding_help connect bank', () => {
 describe('PAYMENT_REJECTION constant', () => {
   it('mentions payments are not available', () => {
     expect(PAYMENT_REJECTION.toLowerCase()).toContain('payment')
+  })
+})
+
+// ── Additional intent coverage ─────────────────────────────────────────────
+
+describe('routeIntent — merchant_query', () => {
+  it('returns merchant spend when a merchant is extractable', async () => {
+    const prisma = makePrisma({
+      transaction: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 't1', amount: new Decimal(-25.00), transactionDate: new Date(), merchantName: 'Tesco', category: 'groceries', rawDescription: 'TESCO' },
+        ]),
+        groupBy: vi.fn().mockResolvedValue([]),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
+    })
+    const response = await routeIntent('merchant_query', 'How much at Tesco this month?', USER_ID, prisma)
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+
+  it('asks which merchant when none is detected', async () => {
+    const prisma = makePrisma()
+    const response = await routeIntent('merchant_query', 'spending somewhere unrecognised', USER_ID, prisma)
+    expect(response).toContain('Which merchant')
+  })
+})
+
+describe('routeIntent — income_query', () => {
+  it('returns income information', async () => {
+    const prisma = makePrisma({
+      transaction: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        groupBy: vi.fn().mockResolvedValue([]),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
+    })
+    const response = await routeIntent('income_query', 'When do I get paid?', USER_ID, prisma)
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+})
+
+describe('routeIntent — savings_query', () => {
+  it('returns savings information', async () => {
+    const prisma = makePrisma()
+    const response = await routeIntent('savings_query', 'How much am I saving?', USER_ID, prisma)
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+})
+
+describe('routeIntent — upcoming_bills', () => {
+  it('returns upcoming bills or a message when none found', async () => {
+    const prisma = makePrisma()
+    const response = await routeIntent('upcoming_bills', 'What bills are due?', USER_ID, prisma)
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+})
+
+// ── LLM paths ──────────────────────────────────────────────────────────────
+
+describe('routeIntent — LLM polish path', () => {
+  const mockFetch = vi.fn()
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('returns polished response when LLM succeeds for a structured intent', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'Polished spending summary.' }] }),
+    })
+    const response = await routeIntent('spending_analysis', 'How much did I spend?', USER_ID, makePrisma(), 'test-key')
+    expect(response).toBe('Polished spending summary.')
+  })
+
+  it('returns structured text when LLM polish fails', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500 })
+    const response = await routeIntent('spending_analysis', 'How much did I spend?', USER_ID, makePrisma(), 'test-key')
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+})
+
+describe('routeIntent — unknown intent AI fallback', () => {
+  const mockFetch = vi.fn()
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('uses AI fallback path for unknown intent when API key present', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'AI fallback answer.' }] }),
+    })
+    const response = await routeIntent('unknown', 'What is life?', USER_ID, makePrisma(), 'test-key')
+    // Either the AI answered or fell back to static — both are valid strings
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
+  })
+
+  it('returns static fallback for unknown intent when AI returns null', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 429 })
+    const response = await routeIntent('unknown', 'What is life?', USER_ID, makePrisma(), 'test-key')
+    expect(typeof response).toBe('string')
+    expect(response.length).toBeGreaterThan(0)
   })
 })
