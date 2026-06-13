@@ -58,6 +58,8 @@ const configSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
   WHATSAPP_VERIFY_TOKEN: z.string().default(''),
   WHATSAPP_APP_SECRET: z.string().default(''),
+  WHATSAPP_OPPORTUNITY_TEMPLATE_NAME: z.string().default(''),
+  WHATSAPP_OPPORTUNITY_TEMPLATE_LANG: z.string().default('en_GB'),
 
   // Affiliate networks
   AWIN_PUBLISHER_ID: z.string().default(''),

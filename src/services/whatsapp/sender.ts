@@ -26,6 +26,13 @@ export interface SendResult {
   waMessageId: string
 }
 
+export interface TemplateComponent {
+  type: 'header' | 'body' | 'button'
+  parameters: Array<{ type: 'text'; text: string } | { type: 'url'; url: string }>
+  sub_type?: string
+  index?: number
+}
+
 interface MetaSendResponse {
   messaging_product: string
   contacts: Array<{ input: string; wa_id: string }>
@@ -117,4 +124,84 @@ export async function sendWhatsAppMessage(
   }
 
   throw lastError ?? new SendError('All send attempts exhausted')
+}
+
+/**
+ * Sends a Meta-approved template message.
+ *
+ * Template messages bypass the 24-hour customer care window and can be sent
+ * proactively. The template must be pre-approved in Meta Business Manager.
+ *
+ * @param to            Recipient phone number in E.164 format
+ * @param templateName  Approved template name (e.g. "monika_opportunity_v1")
+ * @param languageCode  BCP 47 language code (e.g. "en_GB")
+ * @param components    Template components with variable substitutions
+ * @param phoneNumberId Meta WABA phone number ID
+ * @param accessToken   Meta permanent access token
+ */
+export async function sendTemplateMessage(
+  to: string,
+  templateName: string,
+  languageCode: string,
+  components: TemplateComponent[],
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<SendResult> {
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: languageCode },
+      components,
+    },
+  })
+
+  let lastError: SendError | undefined
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const delayMs = RETRY_DELAYS_MS[attempt] ?? 2_000
+    if (delayMs > 0) await sleep(delayMs)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body,
+      })
+    } catch (err) {
+      lastError = new SendError(
+        `Network error on attempt ${attempt + 1}: ${err instanceof Error ? err.message : String(err)}`,
+        undefined,
+        attempt + 1,
+      )
+      continue
+    }
+
+    if (response.ok) {
+      const data = (await response.json()) as MetaSendResponse
+      const wamid = data.messages[0]?.id
+      if (!wamid) throw new SendError('Meta API returned success but no message ID in response')
+      return { waMessageId: wamid }
+    }
+
+    const rawError = await response.text()
+    const safeError = rawError.slice(0, 200)
+
+    if (response.status >= 400 && response.status < 500) {
+      throw new SendError(`Meta API rejected template (${response.status})`, response.status, attempt + 1)
+    }
+
+    lastError = new SendError(
+      `Meta API server error on attempt ${attempt + 1} (${response.status}): ${safeError}`,
+      response.status,
+      attempt + 1,
+    )
+  }
+
+  throw lastError ?? new SendError('All template send attempts exhausted')
 }

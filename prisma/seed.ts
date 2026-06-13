@@ -1,12 +1,13 @@
 /**
- * Database seeder — development and test data only.
+ * Database seeder — categories and MVP offers.
  *
  * Run: npm run db:seed
  *
- * This is a placeholder. Actual seed data (test users, synthetic transactions)
- * will be added in Task 3.x once the categorisation pipeline exists.
+ * Idempotent — safe to run multiple times. Uses upsert so existing records
+ * are updated, not duplicated.
  */
 import { PrismaClient } from '@prisma/client'
+import { seedOfferCategories } from './seeds/offerCategories.js'
 
 const prisma = new PrismaClient()
 
@@ -14,11 +15,14 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log('Seeding database...')
 
-  // TODO: Add test users and synthetic transactions once categorisation pipeline exists
-  // Reference: IMPLEMENTATION_PLAN.md § Task 6.3 (TransactionSyncWorker)
+  const { categories, offers } = await seedOfferCategories(prisma)
 
   // eslint-disable-next-line no-console
-  console.log('Seed complete (no data yet — add seed data in Task 6.3)')
+  console.log(`✓ ${categories} offer categories upserted`)
+  // eslint-disable-next-line no-console
+  console.log(`✓ ${offers} offers upserted`)
+  // eslint-disable-next-line no-console
+  console.log('Seed complete.')
 }
 
 main()
