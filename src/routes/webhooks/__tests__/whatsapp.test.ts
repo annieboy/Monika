@@ -111,6 +111,11 @@ async function buildTestApp(prisma: PrismaClient): Promise<FastifyInstance> {
   return app
 }
 
+// Mock the rate limiter so tests don't need Redis
+vi.mock('../../../lib/userRateLimit.js', () => ({
+  checkUserRateLimit: vi.fn().mockResolvedValue({ allowed: true, retryAfterSecs: 0 }),
+}))
+
 // Mock the opportunity handler so tests don't need DB opportunity tables
 vi.mock('../../../services/conversation/opportunityConversationHandler.js', () => ({
   handleOpportunityReply: vi.fn().mockResolvedValue({ handled: false, response: '' }),
@@ -447,5 +452,34 @@ describe('POST /webhooks/whatsapp — delivery status updates', () => {
     })
 
     expect(prisma.conversation.create).not.toHaveBeenCalled()
+  })
+})
+
+// ── POST /webhooks/whatsapp — rate limit exceeded ─────────────────────────
+
+describe('POST /webhooks/whatsapp — rate limit exceeded', () => {
+  it('returns 200 without processing when rate limit exceeded', async () => {
+    const { checkUserRateLimit } = await import('../../../lib/userRateLimit.js')
+    ;(checkUserRateLimit as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ allowed: false, retryAfterSecs: 30 })
+
+    const prisma = makeMockPrisma()
+    const app = await buildTestApp(prisma)
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
+      body,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toEqual({ status: 'ok' })
+    // processInboundMessage stores conversations — none should have been created
+    expect(prisma.conversation.create).not.toHaveBeenCalled()
+
+    await app.close()
   })
 })
