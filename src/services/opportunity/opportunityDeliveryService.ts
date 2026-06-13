@@ -18,7 +18,7 @@ import { checkDeliveryEligibility } from '../compliance/consentService.js'
 import { scoreOpportunity, rankByCategory } from './opportunityScorer.js'
 import { buildOutreachMessage } from './opportunityMessageBuilder.js'
 import { generateClickUrl } from '../affiliate/clickTrackingService.js'
-import { sendWhatsAppMessage } from '../whatsapp/sender.js'
+import { sendWhatsAppMessage, sendTemplateMessage, type TemplateComponent } from '../whatsapp/sender.js'
 import { config } from '../../config.js'
 import { loadEngagementHistory } from './engagementHistoryService.js'
 
@@ -112,29 +112,68 @@ export async function deliverOpportunitiesToUser(
   // 7. Generate affiliate link
   const affiliateUrl = await generateClickUrl(prisma, userId, offer.id, opp.id)
 
-  // 8. Build message
-  const { body } = buildOutreachMessage({
-    categorySlug: offer.category.slug,
-    providerName: offer.providerName,
-    title: offer.title,
-    shortDescription: offer.shortDescription,
-    keyBenefits: offer.keyBenefits,
-    parameters: offer.parameters as Record<string, unknown>,
-    annualSavingEstimate: opp.annualSavingEstimate ? Number(opp.annualSavingEstimate) : null,
-    currentMonthlySpend: opp.recurringPayment
-      ? Number(opp.recurringPayment.averageAmount)
-      : undefined,
-    affiliateUrl,
-    fcaDisclaimer: offer.fcaDisclaimer,
-  })
+  // 8. Build message and send — use approved template when configured, freeform otherwise
+  let waMessageId: string
 
-  // 9. Send
-  const { waMessageId } = await sendWhatsAppMessage(
-    phone,
-    body,
-    config.WHATSAPP_PHONE_NUMBER_ID,
-    config.WHATSAPP_ACCESS_TOKEN,
-  )
+  if (config.WHATSAPP_OPPORTUNITY_TEMPLATE_NAME) {
+    // Template message: bypasses 24h customer care window for proactive outbound.
+    // Template variables match the Meta-approved "monika_opportunity_v1" template:
+    //   {{1}} = provider name
+    //   {{2}} = annual saving (e.g. "£240") or offer title fallback
+    //   {{3}} = affiliate URL (button URL component)
+    const savingText = opp.annualSavingEstimate
+      ? `£${Number(opp.annualSavingEstimate).toFixed(0)}`
+      : offer.title
+
+    const components: TemplateComponent[] = [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: offer.providerName },
+          { type: 'text', text: savingText },
+        ],
+      },
+      {
+        type: 'button',
+        sub_type: 'url',
+        index: 0,
+        parameters: [{ type: 'url', url: affiliateUrl }],
+      },
+    ]
+
+    const result = await sendTemplateMessage(
+      phone,
+      config.WHATSAPP_OPPORTUNITY_TEMPLATE_NAME,
+      config.WHATSAPP_OPPORTUNITY_TEMPLATE_LANG,
+      components,
+      config.WHATSAPP_PHONE_NUMBER_ID,
+      config.WHATSAPP_ACCESS_TOKEN,
+    )
+    waMessageId = result.waMessageId
+  } else {
+    // Freeform fallback — only works within 24h of last user message
+    const { body } = buildOutreachMessage({
+      categorySlug: offer.category.slug,
+      providerName: offer.providerName,
+      title: offer.title,
+      shortDescription: offer.shortDescription,
+      keyBenefits: offer.keyBenefits,
+      parameters: offer.parameters as Record<string, unknown>,
+      annualSavingEstimate: opp.annualSavingEstimate ? Number(opp.annualSavingEstimate) : null,
+      currentMonthlySpend: opp.recurringPayment
+        ? Number(opp.recurringPayment.averageAmount)
+        : undefined,
+      affiliateUrl,
+      fcaDisclaimer: offer.fcaDisclaimer,
+    })
+    const result = await sendWhatsAppMessage(
+      phone,
+      body,
+      config.WHATSAPP_PHONE_NUMBER_ID,
+      config.WHATSAPP_ACCESS_TOKEN,
+    )
+    waMessageId = result.waMessageId
+  }
 
   // 10. Mark delivered
   await prisma.$transaction([

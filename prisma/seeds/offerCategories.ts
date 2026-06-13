@@ -10,8 +10,6 @@
 import { PrismaClient } from '@prisma/client'
 import { upsertOffer } from '../../src/services/offers/offerUpsertService.js'
 
-const prisma = new PrismaClient()
-
 const CATEGORIES = [
   { slug: 'savings',          name: 'Savings Accounts', iconEmoji: '💰', sortOrder: 1 },
   { slug: 'broadband',        name: 'Broadband',         iconEmoji: '📡', sortOrder: 2 },
@@ -216,26 +214,34 @@ const SEED_OFFERS = [
   },
 ]
 
-async function seed(): Promise<void> {
-  console.log('Seeding offer categories...')
+export async function seedOfferCategories(
+  prisma: PrismaClient,
+): Promise<{ categories: number; offers: number }> {
   for (const cat of CATEGORIES) {
     await prisma.offerCategory.upsert({
       where: { slug: cat.slug },
       create: cat,
       update: { name: cat.name, iconEmoji: cat.iconEmoji, sortOrder: cat.sortOrder },
     })
-    console.log(`  ✓ ${cat.slug}`)
   }
 
-  console.log('\nSeeding offers...')
+  let offers = 0
   for (const offer of SEED_OFFERS) {
-    const result = await upsertOffer(prisma, offer)
-    console.log(`  ${result.action === 'created' ? '✓' : '↑'} ${offer.providerName} — ${offer.title} (${result.action})`)
+    await upsertOffer(prisma, offer)
+    offers++
   }
 
-  console.log('\n✅ Seed complete')
+  return { categories: CATEGORIES.length, offers }
 }
 
-seed()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect())
+// Allow running standalone: ts-node --esm prisma/seeds/offerCategories.ts
+if (process.argv[1]?.endsWith('offerCategories.ts') || process.argv[1]?.endsWith('offerCategories.js')) {
+  const prisma = new PrismaClient()
+  seedOfferCategories(prisma)
+    .then(({ categories, offers }) => {
+      // eslint-disable-next-line no-console
+      console.log(`✅ Seeded ${categories} categories, ${offers} offers`)
+    })
+    .catch(console.error)
+    .finally(() => void prisma.$disconnect())
+}
