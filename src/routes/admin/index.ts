@@ -14,6 +14,7 @@ import { auditLogPage } from './pages/audit.js'
 import { analyticsPage } from './pages/analytics.js'
 import { registerAdminOfferRoutes } from './offers.js'
 import { opportunityAnalyticsPage } from './pages/opportunityAnalytics.js'
+import { conversationsPage } from './pages/conversations.js'
 
 const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── Auth hook — runs before every /admin route ─────────────────────────────
@@ -97,6 +98,15 @@ const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // ── Opportunity analytics ──────────────────────────────────────────────────
   app.get('/opportunities', async (_req, reply) => {
     const html = await opportunityAnalyticsPage(reply.server.prisma)
+    return reply.type('text/html').send(html)
+  })
+
+  // ── Conversation viewer ────────────────────────────────────────────────────
+  app.get('/conversations', async (request, reply) => {
+    const html = await conversationsPage(
+      reply.server.prisma,
+      request.query as Record<string, string>,
+    )
     return reply.type('text/html').send(html)
   })
 }
