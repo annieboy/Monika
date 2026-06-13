@@ -97,6 +97,123 @@ const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     },
   )
 
+  // ── GET /users/me/preferences ─────────────────────────────────────────────
+  app.get<{ Querystring: { userId: string } }>(
+    '/me/preferences',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['userId'],
+          properties: { userId: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { userId } = request.query
+      const prisma = request.server.prisma
+
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletedAt: true } })
+      if (!user) return reply.status(404).send({ error: 'User not found' })
+      if (user.deletedAt) return reply.status(410).send({ error: 'User data has been deleted' })
+
+      const prefs = await prisma.userOpportunityPreferences.findUnique({ where: { userId } })
+
+      return reply.status(200).send({
+        opportunitiesConsent:  prefs?.opportunitiesConsent ?? false,
+        maxMessagesPerWeek:    prefs?.maxMessagesPerWeek   ?? 2,
+        maxMessagesPerMonth:   prefs?.maxMessagesPerMonth  ?? 6,
+        quietHoursStart:       prefs?.quietHoursStart      ?? '21:00',
+        quietHoursEnd:         prefs?.quietHoursEnd        ?? '08:00',
+        disabledCategories:    prefs?.disabledCategories   ?? [],
+        consentGivenAt:        prefs?.consentGivenAt       ?? null,
+        consentWithdrawnAt:    prefs?.consentWithdrawnAt   ?? null,
+      })
+    },
+  )
+
+  // ── PATCH /users/me/preferences ───────────────────────────────────────────
+  app.patch<{
+    Querystring: { userId: string }
+    Body: {
+      opportunitiesConsent?: boolean
+      maxMessagesPerWeek?: number
+      maxMessagesPerMonth?: number
+      quietHoursStart?: string
+      quietHoursEnd?: string
+      disabledCategories?: string[]
+    }
+  }>(
+    '/me/preferences',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['userId'],
+          properties: { userId: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            opportunitiesConsent: { type: 'boolean' },
+            maxMessagesPerWeek:   { type: 'integer', minimum: 0, maximum: 7 },
+            maxMessagesPerMonth:  { type: 'integer', minimum: 0, maximum: 31 },
+            quietHoursStart:      { type: 'string', pattern: '^[0-2][0-9]:[0-5][0-9]$' },
+            quietHoursEnd:        { type: 'string', pattern: '^[0-2][0-9]:[0-5][0-9]$' },
+            disabledCategories:   { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { userId } = request.query
+      const prisma = request.server.prisma
+      const body = request.body
+
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletedAt: true } })
+      if (!user) return reply.status(404).send({ error: 'User not found' })
+      if (user.deletedAt) return reply.status(410).send({ error: 'User data has been deleted' })
+
+      // Determine consent transition timestamps
+      const current = await prisma.userOpportunityPreferences.findUnique({ where: { userId } })
+      const consentTransition: Record<string, unknown> = {}
+      if (body.opportunitiesConsent === true && !current?.opportunitiesConsent) {
+        consentTransition['consentGivenAt'] = new Date()
+        consentTransition['consentMethod'] = 'api'
+        consentTransition['consentWithdrawnAt'] = null
+      } else if (body.opportunitiesConsent === false && current?.opportunitiesConsent) {
+        consentTransition['consentWithdrawnAt'] = new Date()
+      }
+
+      const updateData = {
+        ...(body.opportunitiesConsent !== undefined ? { opportunitiesConsent: body.opportunitiesConsent } : {}),
+        ...(body.maxMessagesPerWeek   !== undefined ? { maxMessagesPerWeek:   body.maxMessagesPerWeek   } : {}),
+        ...(body.maxMessagesPerMonth  !== undefined ? { maxMessagesPerMonth:  body.maxMessagesPerMonth  } : {}),
+        ...(body.quietHoursStart      !== undefined ? { quietHoursStart:      body.quietHoursStart      } : {}),
+        ...(body.quietHoursEnd        !== undefined ? { quietHoursEnd:        body.quietHoursEnd        } : {}),
+        ...(body.disabledCategories   !== undefined ? { disabledCategories:   body.disabledCategories   } : {}),
+        ...consentTransition,
+      }
+
+      const updated = await prisma.userOpportunityPreferences.upsert({
+        where: { userId },
+        create: { userId, ...updateData },
+        update: updateData,
+      })
+
+      return reply.status(200).send({
+        opportunitiesConsent:  updated.opportunitiesConsent,
+        maxMessagesPerWeek:    updated.maxMessagesPerWeek,
+        maxMessagesPerMonth:   updated.maxMessagesPerMonth,
+        quietHoursStart:       updated.quietHoursStart,
+        quietHoursEnd:         updated.quietHoursEnd,
+        disabledCategories:    updated.disabledCategories,
+        consentGivenAt:        updated.consentGivenAt,
+        consentWithdrawnAt:    updated.consentWithdrawnAt,
+      })
+    },
+  )
+
   // ── GET /users/me/opportunities ───────────────────────────────────────────
   app.get<{ Querystring: { userId: string; limit?: string; offset?: string } }>(
     '/me/opportunities',

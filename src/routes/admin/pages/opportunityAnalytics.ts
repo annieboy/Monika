@@ -18,6 +18,7 @@ export async function opportunityAnalyticsPage(prisma: PrismaClient): Promise<st
     commissionStats,
     pendingCommissions,
     recentRuns,
+    revenueTrend,
   ] = await Promise.all([
     // All-time counts
     prisma.opportunity.count({ where: { status: { in: ['DELIVERED', 'CLICKED', 'CONVERTED', 'DISMISSED', 'EXPIRED'] } } }),
@@ -91,6 +92,18 @@ export async function opportunityAnalyticsPage(prisma: PrismaClient): Promise<st
       orderBy: { startedAt: 'desc' },
       take: 5,
     }),
+
+    // Daily revenue trend (last 30 days)
+    prisma.$queryRaw<{ day: string; revenue: string }[]>`
+      SELECT
+        DATE(commission_locked_at)::text AS day,
+        SUM(commission_amount)::text     AS revenue
+      FROM affiliate_clicks
+      WHERE commission_status IN ('APPROVED', 'PAID')
+        AND commission_locked_at >= ${thirtyDaysAgo}
+      GROUP BY DATE(commission_locked_at)
+      ORDER BY DATE(commission_locked_at)
+    `,
   ])
 
   const pct = (n: number, d: number) => d === 0 ? '—' : `${((n / d) * 100).toFixed(1)}%`
@@ -117,6 +130,12 @@ export async function opportunityAnalyticsPage(prisma: PrismaClient): Promise<st
       <td>${o.delivered}</td>
       <td>${o.clicked} <span class="muted">(${pct(o.clicked, o.delivered)})</span></td>
       <td>${o.converted} <span class="muted">(${pct(o.converted, o.delivered)})</span></td>
+    </tr>`).join('')
+
+  const trendRows = (revenueTrend as { day: string; revenue: string }[]).map(r => `
+    <tr>
+      <td>${escHtml(r.day)}</td>
+      <td>${fmt(r.revenue)}</td>
     </tr>`).join('')
 
   const runRows = recentRuns.map(r => `
@@ -178,6 +197,12 @@ export async function opportunityAnalyticsPage(prisma: PrismaClient): Promise<st
     <table class="data-table">
       <thead><tr><th>Provider</th><th>Title</th><th>Delivered</th><th>Clicked</th><th>Converted</th></tr></thead>
       <tbody>${offerRows || '<tr><td colspan="5" class="muted">No data yet</td></tr>'}</tbody>
+    </table>
+
+    <h2>Revenue Trend (last 30 days)</h2>
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>Approved Revenue</th></tr></thead>
+      <tbody>${trendRows || '<tr><td colspan="2" class="muted">No approved commissions yet</td></tr>'}</tbody>
     </table>
 
     <h2>Commission Reconciliation</h2>

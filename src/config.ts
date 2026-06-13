@@ -44,6 +44,7 @@ const configSchema = z.object({
   TRUELAYER_CLIENT_SECRET: z.string().default(''),
   TRUELAYER_REDIRECT_URI: z.string().default('http://localhost:3000/banking/callback'),
   TRUELAYER_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
+  TRUELAYER_WEBHOOK_SECRET: z.string().default(''),
 
   // AI
   ANTHROPIC_API_KEY: z.string().default(''),
