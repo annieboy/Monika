@@ -192,6 +192,75 @@ describe('buildDetailMessage — broadband', () => {
   })
 })
 
+describe('buildDetailMessage — mobile', () => {
+  it('includes data allowance and price', () => {
+    const detail = buildDetailMessage(makeCtx({
+      categorySlug: 'mobile',
+      parameters: { dataGb: 50, monthlyPrice: 12, contractMonths: 12, network: 'EE' },
+    }))
+    expect(detail).toContain('50GB')
+    expect(detail).toContain('£12')
+    expect(detail).toContain('EE')
+  })
+
+  it('shows "Unlimited data" when dataGb is the string "unlimited"', () => {
+    const detail = buildDetailMessage(makeCtx({
+      categorySlug: 'mobile',
+      parameters: { dataGb: 'unlimited', monthlyPrice: 20, contractMonths: 24 },
+    }))
+    expect(detail).toContain('Unlimited data')
+  })
+})
+
+describe('buildDetailMessage — business-banking', () => {
+  it('includes monthly fee and overdraft status', () => {
+    const detail = buildDetailMessage(makeCtx({
+      categorySlug: 'business-banking',
+      parameters: { monthlyFee: 0, freeTransactionMonths: 12, overdraftAvailable: true },
+    }))
+    expect(detail).toContain('Free')
+    expect(detail).toContain('✅ Available')
+  })
+})
+
+describe('buildDetailMessage — accounting', () => {
+  it('includes price and trial days', () => {
+    const detail = buildDetailMessage(makeCtx({
+      categorySlug: 'accounting',
+      parameters: { monthlyPrice: 12, tier: 'Starter', trialDays: 30, features: ['Invoicing', 'Expenses'] },
+    }))
+    expect(detail).toContain('£12')
+    expect(detail).toContain('30 days')
+    expect(detail).toContain('Start free trial')
+  })
+})
+
+describe('buildDetailMessage — default (unknown category)', () => {
+  it('falls back to title and description', () => {
+    const detail = buildDetailMessage(makeCtx({
+      categorySlug: 'insurance',
+      title: 'Home Insurance',
+      shortDescription: 'Protect your home',
+      parameters: {},
+    }))
+    expect(detail).toContain('Home Insurance')
+    expect(detail).toContain('Protect your home')
+  })
+})
+
+describe('buildOutreachMessage — default (unknown category)', () => {
+  it('renders a generic outreach for unrecognised category slugs', () => {
+    const { body } = buildOutreachMessage(makeCtx({
+      categorySlug: 'pet-insurance' as never,
+      title: 'Pet Insurance Deal',
+      shortDescription: 'Save on pet insurance',
+      annualSavingEstimate: 80,
+    }))
+    expect(body).toContain('Pet Insurance Deal')
+    expect(body).toContain('Save on pet insurance')
+  })
+})
+
 describe('CONSENT_PROMPT', () => {
   it('mentions max frequency', () => {
     expect(CONSENT_PROMPT).toContain('2 a week')

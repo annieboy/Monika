@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { classifyIntent } from '../classifier.js'
 
 // No API key → pure rules path in all tests
@@ -129,5 +129,58 @@ describe('classifyIntent — unknown intent', () => {
   it('returns unknown for empty-ish message', async () => {
     const result = await classifyIntent('ok', NO_KEY)
     expect(result.intent).toBe('unknown')
+  })
+})
+
+// ── LLM fallback path ─────────────────────────────────────────────────────
+
+describe('classifyIntent — LLM fallback path', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses LLM result when rules do not match and API key is provided', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: '{"intent": "savings_query", "confidence": "high"}' }],
+      }),
+    }))
+
+    const result = await classifyIntent('completely ambiguous message', 'sk-ant-test-key')
+    expect(result.intent).toBe('savings_query')
+    expect(result.method).toBe('llm')
+  })
+
+  it('falls back to unknown when LLM returns a non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+
+    const result = await classifyIntent('ambiguous message', 'sk-ant-test-key')
+    expect(result.intent).toBe('unknown')
+    expect(result.method).toBe('rules')
+  })
+
+  it('falls back to unknown when LLM fetch throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')))
+
+    const result = await classifyIntent('ambiguous message', 'sk-ant-test-key')
+    expect(result.intent).toBe('unknown')
+    expect(result.method).toBe('rules')
+  })
+
+  it('falls back to unknown when LLM returns invalid JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'not valid json at all' }] }),
+    }))
+
+    const result = await classifyIntent('ambiguous message', 'sk-ant-test-key')
+    expect(result.intent).toBe('unknown')
+  })
+
+  it('does not call fetch when no API key is provided', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await classifyIntent('ambiguous message', '')
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

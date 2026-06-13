@@ -1,12 +1,23 @@
+/**
+ * opportunityWorker tests — tests the actual startOpportunityWorker function
+ * by capturing the BullMQ job handler callback and invoking it directly.
+ *
+ * Verifies: detect-opportunities (single user, all users, error isolation),
+ * deliver-opportunities (single user, batch), expire-offers, reconcile-commissions,
+ * and unknown job type throws.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Worker } from 'bullmq'
+import type { PrismaClient } from '@prisma/client'
 
-// Mock all external dependencies before importing the worker
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+
 vi.mock('../../services/opportunity/recurringPaymentDetector.js', () => ({
   detectRecurringPayments: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../../services/opportunity/opportunityDetector.js', () => ({
-  detectOpportunities: vi.fn().mockResolvedValue([]),
+  detectOpportunities: vi.fn().mockResolvedValue(0),
 }))
 
 vi.mock('../../services/opportunity/opportunityDeliveryService.js', () => ({
@@ -15,181 +26,177 @@ vi.mock('../../services/opportunity/opportunityDeliveryService.js', () => ({
 }))
 
 vi.mock('../../services/offers/offerUpsertService.js', () => ({
-  upsertOffer: vi.fn(),
   expireStaleOffers: vi.fn().mockResolvedValue(3),
 }))
 
+vi.mock('../../services/affiliate/reconciliationService.js', () => ({
+  reconcileCommissions: vi.fn().mockResolvedValue({ checked: 5, errors: 0 }),
+}))
+
 vi.mock('../../queues/connection.js', () => ({
-  createRedisConnection: vi.fn().mockReturnValue({
-    on: vi.fn(),
-    quit: vi.fn(),
-  }),
+  createRedisConnection: vi.fn().mockReturnValue({ on: vi.fn(), quit: vi.fn() }),
+}))
+
+vi.mock('../../queues/opportunityQueue.js', () => ({
+  OPPORTUNITY_QUEUE: 'opportunity-engine',
 }))
 
 vi.mock('bullmq', () => ({
-  Worker: vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
-  })),
+  Worker: vi.fn().mockImplementation(function (_queue: string, _handler: unknown) {
+    return { on: vi.fn() }
+  }),
 }))
 
+import { startOpportunityWorker } from '../opportunityWorker.js'
 import { detectRecurringPayments } from '../../services/opportunity/recurringPaymentDetector.js'
 import { detectOpportunities } from '../../services/opportunity/opportunityDetector.js'
 import { deliverOpportunitiesToUser, runDeliveryBatch } from '../../services/opportunity/opportunityDeliveryService.js'
 import { expireStaleOffers } from '../../services/offers/offerUpsertService.js'
+import { reconcileCommissions } from '../../services/affiliate/reconciliationService.js'
 
-// Pull out the handlers by importing and reconstructing them for unit testing.
-// We test the job handler logic directly rather than through the BullMQ Worker
-// abstraction, which would require a real Redis connection.
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makePrisma(overrides: Record<string, unknown> = {}) {
+function makePrisma(opts: { bankUsers?: { id: string }[]; noBankUsers?: { id: string }[] } = {}): PrismaClient {
+  const bankUsers = opts.bankUsers ?? [{ id: 'user-1' }, { id: 'user-2' }]
+  const noBankUsers = opts.noBankUsers ?? []
   return {
     user: {
-      findMany: vi.fn().mockResolvedValue([{ id: 'user-1' }, { id: 'user-2' }]),
+      findMany: vi.fn()
+        .mockResolvedValueOnce(bankUsers)
+        .mockResolvedValue(noBankUsers),
     },
-    ...overrides,
-  } as unknown as import('@prisma/client').PrismaClient
+  } as unknown as PrismaClient
 }
 
-// Replicate the handler logic from opportunityWorker.ts for unit testing
-async function handleDetect(prisma: import('@prisma/client').PrismaClient, userId?: string) {
-  if (userId) {
-    await detectRecurringPayments(prisma, userId)
-    await detectOpportunities(prisma, userId)
-    return { processed: 1, errors: 0 }
-  }
-
-  const users = await prisma.user.findMany({
-    where: { bankConnections: { some: { consentStatus: 'active' } } },
-    select: { id: true },
-  })
-
-  let errors = 0
-  for (const user of users) {
-    try {
-      await detectRecurringPayments(prisma, user.id)
-      await detectOpportunities(prisma, user.id)
-    } catch {
-      errors++
-    }
-  }
-
-  const noBankUsers = await prisma.user.findMany({
-    where: { bankConnections: { none: {} } },
-    select: { id: true },
-  })
-  for (const user of noBankUsers) {
-    try {
-      await detectOpportunities(prisma, user.id)
-    } catch {
-      errors++
-    }
-  }
-
-  return { processed: users.length + noBankUsers.length, errors }
+function makeJob(name: string, data: Record<string, unknown> = {}) {
+  return { id: 'job-1', name, data }
 }
 
-async function handleDeliver(prisma: import('@prisma/client').PrismaClient, userId?: string) {
-  if (userId) {
-    await deliverOpportunitiesToUser(prisma, userId)
-    return { processed: 1, errors: 0 }
-  }
-  await runDeliveryBatch(prisma, { error: vi.fn(), info: vi.fn() } as never)
-  return { processed: -1, errors: 0 }
+/** Starts the worker and returns the captured BullMQ job handler. */
+function captureHandler(prisma: PrismaClient) {
+  startOpportunityWorker(prisma)
+  const workerCall = vi.mocked(Worker).mock.calls[0]
+  return workerCall![1] as (job: ReturnType<typeof makeJob>) => Promise<unknown>
 }
 
-async function handleExpire(prisma: import('@prisma/client').PrismaClient) {
-  const count = await expireStaleOffers(prisma)
-  return { processed: count, errors: 0 }
-}
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('detect-opportunities handler', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+describe('startOpportunityWorker', () => {
+  beforeEach(() => vi.clearAllMocks())
 
-  it('runs detection for a single user when userId provided', async () => {
+  it('instantiates a BullMQ Worker and returns it', () => {
     const prisma = makePrisma()
-    const result = await handleDetect(prisma, 'user-abc')
+    const worker = startOpportunityWorker(prisma)
+    expect(Worker).toHaveBeenCalledOnce()
+    expect(worker).toBeDefined()
+  })
+})
 
+describe('job: detect-opportunities — single user', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('runs detection for the specified user', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('detect-opportunities', { userId: 'user-abc' }))
     expect(detectRecurringPayments).toHaveBeenCalledWith(prisma, 'user-abc')
     expect(detectOpportunities).toHaveBeenCalledWith(prisma, 'user-abc')
     expect(result).toEqual({ processed: 1, errors: 0 })
   })
+})
 
-  it('runs detection for all bank-linked and no-bank users when no userId', async () => {
-    const prisma = makePrisma({
-      user: {
-        findMany: vi.fn()
-          .mockResolvedValueOnce([{ id: 'user-1' }, { id: 'user-2' }])  // bank users
-          .mockResolvedValueOnce([{ id: 'user-3' }]),                    // no-bank users
-      },
-    })
+describe('job: detect-opportunities — all users', () => {
+  beforeEach(() => vi.clearAllMocks())
 
-    const result = await handleDetect(prisma)
-
+  it('processes all bank-linked users', async () => {
+    const prisma = makePrisma({ bankUsers: [{ id: 'u1' }, { id: 'u2' }] })
+    const handler = captureHandler(prisma)
+    await handler(makeJob('detect-opportunities'))
     expect(detectRecurringPayments).toHaveBeenCalledTimes(2)
-    expect(detectOpportunities).toHaveBeenCalledTimes(3) // 2 bank + 1 no-bank
-    expect(result.processed).toBe(3)
-    expect(result.errors).toBe(0)
   })
 
-  it('counts errors but continues processing other users', async () => {
-    vi.mocked(detectRecurringPayments).mockRejectedValueOnce(new Error('DB timeout'))
-
+  it('also processes no-bank users for no_bank_profile detection', async () => {
     const prisma = makePrisma({
-      user: {
-        findMany: vi.fn()
-          .mockResolvedValueOnce([{ id: 'user-1' }, { id: 'user-2' }])
-          .mockResolvedValueOnce([]),
-      },
+      bankUsers: [{ id: 'u1' }],
+      noBankUsers: [{ id: 'u2' }],
     })
+    const handler = captureHandler(prisma)
+    await handler(makeJob('detect-opportunities'))
+    // detectOpportunities called for bank user + no-bank user
+    expect(detectOpportunities).toHaveBeenCalledTimes(2)
+  })
 
-    const result = await handleDetect(prisma)
+  it('returns processed count = bank + no-bank users', async () => {
+    const prisma = makePrisma({
+      bankUsers: [{ id: 'u1' }, { id: 'u2' }],
+      noBankUsers: [{ id: 'u3' }],
+    })
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('detect-opportunities')) as { processed: number; errors: number }
+    expect(result.processed).toBe(3)
+  })
 
+  it('isolates errors — increments errors count but continues processing remaining users', async () => {
+    vi.mocked(detectRecurringPayments).mockRejectedValueOnce(new Error('timeout'))
+    const prisma = makePrisma({ bankUsers: [{ id: 'u1' }, { id: 'u2' }] })
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('detect-opportunities')) as { errors: number }
     expect(result.errors).toBe(1)
-    expect(result.processed).toBe(2) // still ran for 2 bank users
+    // Second user still processed despite first failing
+    expect(detectRecurringPayments).toHaveBeenCalledTimes(2)
   })
 })
 
-describe('deliver-opportunities handler', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+describe('job: deliver-opportunities', () => {
+  beforeEach(() => vi.clearAllMocks())
 
-  it('delivers to a single user when userId provided', async () => {
+  it('delivers to a specific user when userId provided', async () => {
     const prisma = makePrisma()
-    const result = await handleDeliver(prisma, 'user-abc')
-
-    expect(deliverOpportunitiesToUser).toHaveBeenCalledWith(prisma, 'user-abc')
-    expect(runDeliveryBatch).not.toHaveBeenCalled()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('deliver-opportunities', { userId: 'user-xyz' }))
+    expect(deliverOpportunitiesToUser).toHaveBeenCalledWith(prisma, 'user-xyz')
     expect(result).toEqual({ processed: 1, errors: 0 })
   })
 
   it('runs batch delivery when no userId provided', async () => {
     const prisma = makePrisma()
-    const result = await handleDeliver(prisma)
-
+    const handler = captureHandler(prisma)
+    await handler(makeJob('deliver-opportunities'))
     expect(runDeliveryBatch).toHaveBeenCalledOnce()
-    expect(deliverOpportunitiesToUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('job: expire-offers', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls expireStaleOffers and returns the count as processed', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('expire-offers'))
+    expect(expireStaleOffers).toHaveBeenCalledWith(prisma)
+    expect(result).toEqual({ processed: 3, errors: 0 })
+  })
+})
+
+describe('job: reconcile-commissions', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls reconcileCommissions and maps checked to processed', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('reconcile-commissions')) as { processed: number; errors: number }
+    expect(reconcileCommissions).toHaveBeenCalledWith(prisma)
+    expect(result.processed).toBe(5)
     expect(result.errors).toBe(0)
   })
 })
 
-describe('expire-offers handler', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+describe('job: unknown type', () => {
+  beforeEach(() => vi.clearAllMocks())
 
-  it('returns count of expired offers', async () => {
-    vi.mocked(expireStaleOffers).mockResolvedValueOnce(5)
-
+  it('throws for unrecognised job names', async () => {
     const prisma = makePrisma()
-    const result = await handleExpire(prisma)
-
-    expect(expireStaleOffers).toHaveBeenCalledWith(prisma)
-    expect(result).toEqual({ processed: 5, errors: 0 })
-  })
-
-  it('returns 0 when no offers expired', async () => {
-    vi.mocked(expireStaleOffers).mockResolvedValueOnce(0)
-
-    const prisma = makePrisma()
-    const result = await handleExpire(prisma)
-
-    expect(result).toEqual({ processed: 0, errors: 0 })
+    const handler = captureHandler(prisma)
+    await expect(handler(makeJob('do-something-weird'))).rejects.toThrow('Unknown job type')
   })
 })

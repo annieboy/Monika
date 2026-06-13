@@ -309,6 +309,22 @@ describe('runFullSync', () => {
   })
 })
 
+// ── MockOpenBankingProvider — initiateConsent and refreshToken ────────────
+
+describe('MockOpenBankingProvider', () => {
+  it('initiateConsent returns authUrl and state', async () => {
+    const result = await provider.initiateConsent('user-id', 'https://example.com/callback')
+    expect(result.authUrl).toContain('https://example.com/callback')
+    expect(result.state).toBeTruthy()
+  })
+
+  it('refreshToken returns new consent with updated accessToken', async () => {
+    const refreshed = await provider.refreshToken(MOCK_CONSENT)
+    expect(refreshed.accessToken).toContain('mock-refreshed-')
+    expect(refreshed.accessToken).not.toBe(MOCK_CONSENT.accessToken)
+  })
+})
+
 // ── MOCK_ACCOUNTS constant ────────────────────────────────────────────────
 
 describe('MOCK_ACCOUNTS', () => {

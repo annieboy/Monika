@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { detectCadence, computeAmountStats } from '../recurringPaymentDetector.js'
+import { describe, it, expect, vi } from 'vitest'
+import { detectCadence, computeAmountStats, detectRecurringPayments } from '../recurringPaymentDetector.js'
+import type { PrismaClient } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 
 describe('detectCadence', () => {
   function datesFromGaps(startDate: Date, gapDays: number[]): Date[] {
@@ -100,5 +102,96 @@ describe('computeAmountStats', () => {
     const stats = computeAmountStats([17.99, 17.99, 18.99, 17.99])
     const varianceRatio = stats.stdDev / stats.averageAmount
     expect(varianceRatio).toBeLessThan(0.10)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// detectRecurringPayments
+// ---------------------------------------------------------------------------
+
+function makeTxn(merchantName: string, amount: number, daysAgo: number, overrides: Record<string, unknown> = {}) {
+  return {
+    merchantName,
+    merchantNameClean: null as string | null,
+    rawDescription: `DESC ${merchantName}`,
+    amount: new Decimal(-Math.abs(amount)), // outgoing = negative
+    transactionDate: new Date(Date.now() - daysAgo * 86_400_000),
+    currency: 'GBP',
+    category: 'subscriptions',
+    status: 'settled',
+    ...overrides,
+  }
+}
+
+function buildPrisma(txns: ReturnType<typeof makeTxn>[]) {
+  const upsert = vi.fn().mockResolvedValue({})
+  const findMany = vi.fn().mockResolvedValue(txns)
+  return {
+    transaction: { findMany },
+    recurringPayment: { upsert },
+  } as unknown as PrismaClient
+}
+
+describe('detectRecurringPayments', () => {
+  it('returns 0 when no transactions', async () => {
+    const prisma = buildPrisma([])
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(0)
+    expect((prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
+  })
+
+  it('returns 0 when merchant has only one occurrence', async () => {
+    const prisma = buildPrisma([makeTxn('Netflix', 17.99, 10)])
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(0)
+  })
+
+  it('upserts and returns count for a regular merchant with 2+ occurrences', async () => {
+    const txns = [
+      makeTxn('Netflix', 17.99, 60),
+      makeTxn('Netflix', 17.99, 30),
+    ]
+    const prisma = buildPrisma(txns)
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(1)
+    expect((prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>)).toHaveBeenCalledOnce()
+  })
+
+  it('skips high-variance merchant', async () => {
+    // stdDev/avg >> 0.20, so should be filtered
+    const txns = [
+      makeTxn('RandomShop', 10, 60),
+      makeTxn('RandomShop', 200, 30),
+    ]
+    const prisma = buildPrisma(txns)
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(0)
+    expect((prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
+  })
+
+  it('uses merchantNameClean when available', async () => {
+    const txns = [
+      makeTxn('netflix inc', 17.99, 60, { merchantNameClean: 'Netflix' }),
+      makeTxn('netflix inc', 17.99, 30, { merchantNameClean: 'Netflix' }),
+    ]
+    const prisma = buildPrisma(txns)
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(1)
+    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    // The merchant name used for grouping/display should come from merchantNameClean
+    expect(upsertCall.create.merchantName).toBe('Netflix')
+  })
+
+  it('uses rawDescription as fallback when merchantName is null', async () => {
+    const txns = [
+      makeTxn('ignored', 9.99, 60, { merchantName: null, merchantNameClean: null, rawDescription: 'ACME SUB' }),
+      makeTxn('ignored', 9.99, 30, { merchantName: null, merchantNameClean: null, rawDescription: 'ACME SUB' }),
+    ]
+    const prisma = buildPrisma(txns)
+    const result = await detectRecurringPayments(prisma, 'user-1')
+    expect(result).toBe(1)
+    const upsertCall = (prisma.recurringPayment.upsert as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    // merchantSlug is derived from rawDescription
+    expect(upsertCall.create.merchantSlug).toBeTruthy()
   })
 })

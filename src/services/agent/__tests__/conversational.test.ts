@@ -26,6 +26,28 @@ function mockSuccess(text: string) {
   })
 }
 
+const FULL_SNAPSHOT: FinancialSnapshot = {
+  currentBalances: [{ displayName: 'Current', accountType: 'CURRENT', currentBalance: 1200, availableBalance: 1200 }],
+  totalBalance: 1200,
+  thisMonthSpend: 800,
+  lastMonthSpend: 750,
+  monthlyIncome: 2500,
+  savingsRate: 20,
+  topCategories: [
+    { category: 'groceries', total: 240, transactionCount: 12 },
+    { category: 'transport', total: 85, transactionCount: 8 },
+  ],
+  subscriptions: [
+    { merchantName: 'Netflix', monthlyAmount: 15.99 } as never,
+    { merchantName: 'Spotify', monthlyAmount: 9.99 } as never,
+  ],
+  recentTransactions: [
+    { date: '2024-06-01', merchant: 'Tesco', amount: 42.50, category: 'groceries' },
+    { date: '2024-06-02', merchant: 'TfL', amount: 5.00, category: null as never },
+  ],
+  totalSubscriptions: 25.98,
+}
+
 describe('answerWithAI', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -90,6 +112,18 @@ describe('answerWithAI', () => {
     // First message should contain the snapshot data
     expect(body.messages[0]?.content).toContain('FINANCIAL DATA')
     expect(body.messages[0]?.content).toContain('original question')
+  })
+
+  it('builds a prompt that includes categories, subscriptions, and transactions', async () => {
+    mockSuccess('context-aware reply')
+    await answerWithAI('how am I doing?', FULL_SNAPSHOT, 'key')
+    const body = JSON.parse((mockFetch.mock.calls[0] as [string, { body: string }])[1].body) as {
+      messages: { role: string; content: string }[]
+    }
+    const content = body.messages[0]?.content ?? ''
+    expect(content).toContain('groceries')
+    expect(content).toContain('Netflix')
+    expect(content).toContain('Tesco')
   })
 
   it('current message is always the last message', async () => {

@@ -5,7 +5,7 @@
  * in the key content: numbers, labels, plurals, empty-state copy. Any change
  * that alters figures or messaging is caught immediately.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   formatSpendingAnalysis,
   formatSubscriptions,
@@ -16,6 +16,9 @@ import {
   formatSafeToSpend,
   formatAffordability,
   buildFormattingPrompt,
+  formatMerchantSpend,
+  formatUpcomingBills,
+  polishWithLlm,
 } from '../formatter.js'
 
 // ── formatSpendingAnalysis ────────────────────────────────────────────────────
@@ -292,6 +295,72 @@ describe('formatAffordability', () => {
     expect(out).toContain('Monthly income')
     expect(out).toContain('£4000.00')
     expect(out).toContain('Disposable income')
+  })
+})
+
+// ── formatMerchantSpend ───────────────────────────────────────────────────────
+
+describe('formatMerchantSpend', () => {
+  const DATE = new Date('2024-03-01T00:00:00Z')
+
+  it('returns no-transactions message when transactionCount is 0 (line 123)', () => {
+    const out = formatMerchantSpend('Tesco', { total: 0, transactionCount: 0, transactions: [] }, DATE)
+    expect(out).toContain('No transactions found at Tesco')
+  })
+
+  it('shows total and transaction count when data exists', () => {
+    const out = formatMerchantSpend('Tesco', {
+      total: 45.50,
+      transactionCount: 3,
+      transactions: [
+        { date: '1 Mar', merchant: 'Tesco', amount: 20.00 },
+        { date: '5 Mar', merchant: 'Tesco', amount: 15.00 },
+        { date: '10 Mar', merchant: 'Tesco', amount: 10.50 },
+      ],
+    }, DATE)
+    expect(out).toContain('£45.50')
+    expect(out).toContain('3 transactions')
+  })
+})
+
+// ── formatUpcomingBills ───────────────────────────────────────────────────────
+
+describe('formatUpcomingBills', () => {
+  it('returns empty-state message when subscriptions array is empty', () => {
+    const out = formatUpcomingBills([], 0)
+    expect(out).toContain("don't see any upcoming")
+  })
+
+  it('lists subscriptions and total when array is non-empty (lines 175-181)', () => {
+    const out = formatUpcomingBills(
+      [
+        { merchantName: 'Netflix', subscriptionName: 'Netflix', monthlyAmount: 15.99, lastSeen: new Date() },
+        { merchantName: 'Spotify', subscriptionName: 'Spotify', monthlyAmount: 9.99, lastSeen: new Date() },
+      ],
+      0,
+    )
+    expect(out).toContain('Netflix')
+    expect(out).toContain('£25.98/month')
+  })
+})
+
+// ── polishWithLlm ─────────────────────────────────────────────────────────────
+
+describe('polishWithLlm', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('returns original structured text when fetch throws (line 319 catch branch)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')))
+    const result = await polishWithLlm('spending', 'Your spending: £100', 'How much did I spend?', 'fake-key')
+    expect(result).toBe('Your spending: £100')
+  })
+
+  it('returns original structured text when response is not ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+    const result = await polishWithLlm('spending', 'My data', 'question', 'fake-key')
+    expect(result).toBe('My data')
   })
 })
 
