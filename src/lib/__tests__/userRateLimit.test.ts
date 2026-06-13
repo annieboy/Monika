@@ -14,8 +14,7 @@ vi.mock('ioredis', () => {
   return { Redis: MockRedis }
 })
 
-// Reset singleton between tests
-const { _resetRedisForTest, checkUserRateLimit } = await import('../userRateLimit.js')
+import { _resetRedisForTest, checkUserRateLimit } from '../userRateLimit.js'
 
 const PHONE_HASH = 'abc123deadbeef'
 const REDIS_URL = 'redis://localhost:6379'

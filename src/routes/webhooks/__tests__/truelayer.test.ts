@@ -17,6 +17,11 @@ vi.mock('../../../services/opportunity/opportunityDetector.js', () => ({
   detectOpportunities: vi.fn().mockResolvedValue(3),
 }))
 
+const mockQueueAdd = vi.fn().mockResolvedValue({ id: 'job-1' })
+vi.mock('../../../queues/opportunityQueue.js', () => ({
+  getOpportunityQueue: () => ({ add: mockQueueAdd }),
+}))
+
 import truelayerRoutes from '../truelayer.js'
 import { config } from '../../../config.js'
 import { detectOpportunities } from '../../../services/opportunity/opportunityDetector.js'
@@ -194,6 +199,52 @@ describe('POST /webhooks/truelayer', () => {
 
     expect(res.statusCode).toBe(200)
     expect(detectOpportunities).toHaveBeenCalled()
+  })
+
+  it('enqueues deliver-opportunities when transaction_created detects opportunities', async () => {
+    const body = JSON.stringify({
+      type: 'transaction_created',
+      event_id: 'evt-8',
+      timestamp: new Date().toISOString(),
+      payload: { user_id: 'user-deliver-test' },
+    })
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/truelayer',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+
+    // Allow async queue add to settle
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      'deliver-opportunities',
+      { userId: 'user-deliver-test' },
+      expect.objectContaining({ priority: 1 }),
+    )
+  })
+
+  it('does not enqueue delivery when no opportunities detected', async () => {
+    vi.mocked(detectOpportunities).mockResolvedValueOnce(0)
+
+    const body = JSON.stringify({
+      type: 'transaction_created',
+      event_id: 'evt-9',
+      timestamp: new Date().toISOString(),
+      payload: { user_id: 'user-no-opps' },
+    })
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/truelayer',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(mockQueueAdd).not.toHaveBeenCalled()
   })
 
   it('gracefully handles transaction_created with missing user_id', async () => {
