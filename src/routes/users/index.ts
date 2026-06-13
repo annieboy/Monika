@@ -1,8 +1,9 @@
 /**
- * User self-service routes — GDPR rights endpoints.
+ * User self-service routes — GDPR rights endpoints + opportunity history.
  *
- * POST /users/delete  — Right to Erasure (Article 17)
- * GET  /users/export  — Right of Access (Article 15)
+ * POST /users/delete           — Right to Erasure (Article 17)
+ * GET  /users/export           — Right of Access (Article 15)
+ * GET  /users/me/opportunities — Opportunity history for a user
  */
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { deleteUser, exportUserData } from '../../services/users/deletion.js'
@@ -95,6 +96,83 @@ const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         .send(data)
     },
   )
+
+  // ── GET /users/me/opportunities ───────────────────────────────────────────
+  app.get<{ Querystring: { userId: string; limit?: string; offset?: string } }>(
+    '/me/opportunities',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId: { type: 'string', format: 'uuid' },
+            limit:  { type: 'string' },
+            offset: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { userId, limit: limitStr, offset: offsetStr } = request.query
+      const prisma = request.server.prisma
+      const limit  = Math.min(parseInt(limitStr  ?? '20', 10), 100)
+      const offset = parseInt(offsetStr ?? '0', 10)
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, deletedAt: true },
+      })
+
+      if (!user) return reply.status(404).send({ error: 'User not found' })
+      if (user.deletedAt) return reply.status(410).send({ error: 'User data has been deleted' })
+
+      const [opportunities, total] = await Promise.all([
+        prisma.opportunity.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+          select: {
+            id: true,
+            status: true,
+            annualSavingEstimate: true,
+            savingConfidence: true,
+            createdAt: true,
+            deliveredAt: true,
+            expiresAt: true,
+            offer: {
+              select: {
+                id: true,
+                title: true,
+                providerName: true,
+                shortDescription: true,
+                category: { select: { slug: true, name: true } },
+              },
+            },
+          },
+        }),
+        prisma.opportunity.count({ where: { userId } }),
+      ])
+
+      return reply.status(200).send({
+        total,
+        limit,
+        offset,
+        items: opportunities.map(o => ({
+          id: o.id,
+          status: o.status,
+          annualSavingEstimate: o.annualSavingEstimate ? Number(o.annualSavingEstimate) : null,
+          savingConfidence: o.savingConfidence,
+          createdAt: o.createdAt,
+          deliveredAt: o.deliveredAt,
+          expiresAt: o.expiresAt,
+          offer: o.offer,
+        })),
+      })
+    },
+  )
 }
 
 export default userRoutes
+
