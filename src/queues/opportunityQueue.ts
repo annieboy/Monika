@@ -13,6 +13,7 @@ export type OpportunityJobName =
   | 'detect-opportunities'
   | 'deliver-opportunities'
   | 'expire-offers'
+  | 'reconcile-commissions'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -82,6 +83,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
     {
       name: 'expire-offers',
       data: {} satisfies ExpireOffersData,
+      opts: { priority: 3 },
+    },
+  )
+
+  // Nightly at 03:00 UTC — reconcile pending commissions with affiliate networks
+  await queue.upsertJobScheduler(
+    'nightly-reconcile',
+    { pattern: '0 3 * * *', tz: 'UTC' },
+    {
+      name: 'reconcile-commissions',
+      data: {},
       opts: { priority: 3 },
     },
   )

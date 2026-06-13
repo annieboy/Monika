@@ -20,40 +20,10 @@ import { buildOutreachMessage } from './opportunityMessageBuilder.js'
 import { generateClickUrl } from '../affiliate/clickTrackingService.js'
 import { sendWhatsAppMessage } from '../whatsapp/sender.js'
 import { config } from '../../config.js'
-import type { EngagementHistory } from './opportunityScorer.js'
+import { loadEngagementHistory } from './engagementHistoryService.js'
 
 // ── Delivery spacing ────────────────────────────────────────────────────────
 const MIN_HOURS_BETWEEN_MESSAGES = 48
-
-async function getEngagementHistory(
-  prisma: PrismaClient,
-  userId: string,
-): Promise<EngagementHistory> {
-  const clicks = await prisma.opportunity.groupBy({
-    by: ['offerId'],
-    where: { userId },
-    _count: { _all: true },
-  })
-
-  // Build per-category engagement from opportunity records
-  const opportunities = await prisma.opportunity.findMany({
-    where: { userId },
-    include: { offer: { include: { category: true } } },
-  })
-
-  const byCategory: EngagementHistory['byCategory'] = {}
-  for (const opp of opportunities) {
-    const slug = opp.offer.category.slug
-    const cat = byCategory[slug] ?? { delivered: 0, clicks: 0, conversions: 0, dismissals: 0 }
-    if (opp.deliveredAt) cat.delivered++
-    if (opp.clickedAt) cat.clicks++
-    if (opp.convertedAt) cat.conversions++
-    if (opp.dismissedAt) cat.dismissals++
-    byCategory[slug] = cat
-  }
-
-  return { byCategory }
-}
 
 async function getPhoneNumber(prisma: PrismaClient, userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
@@ -106,7 +76,7 @@ export async function deliverOpportunitiesToUser(
   if (pending.length === 0) return { delivered: 0, skipped: 0 }
 
   // 4. Score and pick top-1 per category
-  const history = await getEngagementHistory(prisma, userId)
+  const history = await loadEngagementHistory(prisma, userId)
   const scored = pending.map(opp =>
     scoreOpportunity(
       {
