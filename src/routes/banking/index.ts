@@ -7,6 +7,8 @@ import { config } from '../../config.js'
 import bankingStartRoute from './start.js'
 import disconnectRoute from './disconnect.js'
 import { sendBankConnectedNotification } from '../../services/whatsapp/notify.js'
+import { recordOptIn } from '../../services/compliance/consentService.js'
+import { getOpportunityQueue } from '../../queues/opportunityQueue.js'
 
 interface ConnectQuery {
   userId?: string
@@ -69,6 +71,14 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           userId,
         )
         request.log.info({ connectionId: connection.id, ...syncResult }, 'Mock bank connection created')
+
+        await recordOptIn(request.server.prisma, userId, 'bank_connect_mock')
+        getOpportunityQueue()
+          .add('detect-opportunities', { userId }, { priority: 1 })
+          .catch((err: unknown) => {
+            request.log.error({ err, userId }, 'Failed to enqueue mock post-connect detection')
+          })
+
         return reply.status(200).send({
           connectionId: connection.id,
           provider: connection.provider,
@@ -164,6 +174,17 @@ const bankingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           { userId, connectionId: connection.id, ...syncResult },
           'TrueLayer bank connection completed',
         )
+
+        // Record consent so the delivery compliance gate allows opportunity messages
+        await recordOptIn(prisma, userId, 'bank_connect')
+
+        // Enqueue immediate opportunity detection — don't make the user wait for
+        // the nightly 09:00 UTC batch job to run
+        getOpportunityQueue()
+          .add('detect-opportunities', { userId }, { priority: 1 })
+          .catch((err: unknown) => {
+            request.log.error({ err, userId }, 'Failed to enqueue post-connect detection')
+          })
 
         sendBankConnectedNotification(prisma, userId, syncResult).catch((err: unknown) => {
           request.log.error({ err, userId }, 'Failed to send bank-connected WhatsApp notification')

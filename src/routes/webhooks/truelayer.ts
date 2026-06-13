@@ -21,6 +21,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { config } from '../../config.js'
 import { logger } from '../../logger.js'
 import { detectOpportunities } from '../../services/opportunity/opportunityDetector.js'
+import { getOpportunityQueue } from '../../queues/opportunityQueue.js'
 
 // ── Signature verification ──────────────────────────────────────────────────
 
@@ -100,6 +101,15 @@ async function handleEvent(app: FastifyInstance, event: TrueLayerEvent): Promise
       }
       const count = await detectOpportunities(prisma, userId)
       logger.info({ userId, opportunitiesDetected: count }, 'TrueLayer transaction_created: opportunities detected')
+
+      // Enqueue delivery immediately if any opportunities were found
+      if (count > 0) {
+        await getOpportunityQueue()
+          .add('deliver-opportunities', { userId }, { priority: 1 })
+          .catch((err: unknown) => {
+            logger.error({ err, userId }, 'Failed to enqueue delivery after transaction_created')
+          })
+      }
       break
     }
 
