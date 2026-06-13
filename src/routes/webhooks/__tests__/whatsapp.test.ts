@@ -87,6 +87,7 @@ function makeMockPrisma(): PrismaClient {
     },
     conversation: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'conv-uuid' }),
       update: vi.fn().mockResolvedValue({}),
     },

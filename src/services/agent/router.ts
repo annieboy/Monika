@@ -16,6 +16,7 @@ import {
   polishWithLlm,
 } from '../analytics/formatter.js'
 import { answerWithAI } from './conversational.js'
+import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
 import { trackEvent } from '../analytics/events.js'
@@ -69,6 +70,7 @@ export async function routeIntent(
   userId: string,
   prisma: PrismaClient,
   anthropicApiKey = '',
+  history: HistoryMessage[] = [],
 ): Promise<string> {
   // Payment requests — not yet supported
   if (intent === 'payment_request') return PAYMENT_REJECTION
@@ -189,7 +191,7 @@ export async function routeIntent(
       // Conversational AI fallback — answers anything using full financial context
       if (anthropicApiKey) {
         const snapshot = await analytics.getFinancialSnapshot(userId)
-        const aiAnswer = await answerWithAI(message, snapshot, anthropicApiKey)
+        const aiAnswer = await answerWithAI(message, snapshot, anthropicApiKey, history)
         if (aiAnswer) return aiAnswer
       }
       return STATIC_UNKNOWN
