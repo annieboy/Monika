@@ -4,6 +4,7 @@ import { hashPhoneNumber, encrypt } from '../../lib/crypto.js'
 import { classifyIntent } from '../agent/classifier.js'
 import { routeIntent } from '../agent/router.js'
 import { trackEvent, hasAskedBefore } from '../analytics/events.js'
+import { handleOpportunityReply } from '../conversation/opportunityConversationHandler.js'
 import { config } from '../../config.js'
 
 // Intents that count as a real "data question" (not onboarding/unknown)
@@ -83,6 +84,30 @@ export async function processInboundMessage(
     },
     select: { id: true },
   })
+
+  // Check if this is a reply to an active opportunity message or consent flow
+  // This runs before intent classification — opportunity replies are stateful
+  const opportunityResult = await handleOpportunityReply(prisma, user.id, text)
+  if (opportunityResult.handled) {
+    const assistantConversation = await prisma.conversation.create({
+      data: {
+        userId: user.id,
+        sessionId,
+        role: 'assistant',
+        content: opportunityResult.response,
+        modelUsed: 'opportunity_handler',
+      },
+      select: { id: true },
+    })
+    return {
+      userId: user.id,
+      conversationId: userConversation.id,
+      responseConversationId: assistantConversation.id,
+      isNewUser,
+      intent: 'opportunity_reply',
+      response: opportunityResult.response,
+    }
+  }
 
   // Classify and route — routeIntent queries live transaction data for data-driven intents
   const classification = await classifyIntent(text, config.ANTHROPIC_API_KEY)

@@ -106,6 +106,11 @@ async function buildTestApp(prisma: PrismaClient): Promise<FastifyInstance> {
   return app
 }
 
+// Mock the opportunity handler so tests don't need DB opportunity tables
+vi.mock('../../../services/conversation/opportunityConversationHandler.js', () => ({
+  handleOpportunityReply: vi.fn().mockResolvedValue({ handled: false, response: '' }),
+}))
+
 // Mock the sender so tests don't hit the real Meta API
 vi.mock('../../../services/whatsapp/sender.js', () => ({
   sendWhatsAppMessage: vi.fn().mockResolvedValue({ waMessageId: 'wamid.outbound' }),
