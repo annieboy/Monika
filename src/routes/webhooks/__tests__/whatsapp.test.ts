@@ -91,6 +91,10 @@ function makeMockPrisma(): PrismaClient {
       create: vi.fn().mockResolvedValue({ id: 'conv-uuid' }),
       update: vi.fn().mockResolvedValue({}),
     },
+    userOpportunityPreferences: {
+      // Simulate existing prefs so consent prompt is not appended in route tests
+      findUnique: vi.fn().mockResolvedValue({ opportunitiesConsent: true }),
+    },
   } as unknown as PrismaClient
 }
 

@@ -5,6 +5,7 @@ import { routeIntent } from '../agent/router.js'
 import { trackEvent, hasAskedBefore } from '../analytics/events.js'
 import { handleOpportunityReply } from '../conversation/opportunityConversationHandler.js'
 import { getOrCreateSession, loadSessionHistory } from '../conversation/sessionService.js'
+import { CONSENT_PROMPT } from '../opportunity/opportunityMessageBuilder.js'
 import { config } from '../../config.js'
 
 // Intents that count as a real "data question" (not onboarding/unknown)
@@ -117,6 +118,10 @@ export async function processInboundMessage(
     }
   }
 
+  // Check if this user has ever been asked for consent (no prefs = first interaction)
+  const existingPrefs = await prisma.userOpportunityPreferences.findUnique({ where: { userId: user.id } })
+  const needsConsentAsk = !existingPrefs
+
   // Classify and route — routeIntent queries live transaction data for data-driven intents
   const classification = await classifyIntent(text, config.ANTHROPIC_API_KEY)
   const isDataIntent = DATA_INTENTS.has(classification.intent)
@@ -124,7 +129,7 @@ export async function processInboundMessage(
   // Check first_question before we create the assistant row (so the count stays at 0 prior)
   const isFirstQuestion = isDataIntent ? !(await hasAskedBefore(prisma, user.id)) : false
 
-  const response = await routeIntent(
+  const rawResponse = await routeIntent(
     classification.intent,
     text,
     user.id,
@@ -132,6 +137,13 @@ export async function processInboundMessage(
     config.ANTHROPIC_API_KEY,
     history,
   )
+
+  // Append the consent ask on the user's first interaction (no prefs yet).
+  // Bank-connected users are auto-opted in (recordOptIn on connect), so this
+  // only fires for users who message without linking their bank first.
+  const response = needsConsentAsk
+    ? `${rawResponse}\n\n---\n\n${CONSENT_PROMPT}`
+    : rawResponse
 
   // Track product analytics events (fire-and-forget)
   if (isDataIntent) {
