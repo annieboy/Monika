@@ -5,8 +5,13 @@
  * rich financial snapshot to Claude and lets it answer naturally. This is
  * the long-tail handler that covers the hundreds of questions users ask
  * that aren't worth individual code paths.
+ *
+ * Conversation history from the current session is included so Claude can
+ * answer follow-up questions without losing context ("what about last month?",
+ * "and Tesco specifically?", etc.).
  */
 import type { FinancialSnapshot } from '../analytics/analytics.js'
+import type { HistoryMessage } from '../conversation/sessionService.js'
 
 function formatSnapshotForPrompt(snapshot: FinancialSnapshot): string {
   const balanceLines = snapshot.currentBalances
@@ -52,6 +57,7 @@ export async function answerWithAI(
   userMessage: string,
   snapshot: FinancialSnapshot,
   apiKey: string,
+  history: HistoryMessage[] = [],
 ): Promise<string | null> {
   const systemPrompt = `You are Monika, a friendly and knowledgeable UK personal finance assistant. You communicate via WhatsApp — keep responses concise, warm, and practical.
 
@@ -66,13 +72,30 @@ Rules:
 - Format numbers as £X,XXX.XX
 - Today's date is provided in the data`
 
-  const userPrompt = `Here is the user's financial data:
+  // The financial snapshot is prepended to the first user turn so it's always
+  // in context. If there's prior history, earlier turns come first.
+  const snapshotContext = `Here is the user's financial data:\n\n${formatSnapshotForPrompt(snapshot)}\n\n`
 
-${formatSnapshotForPrompt(snapshot)}
+  // Build message list: history + current message
+  // The snapshot is injected once at the top of the first user message.
+  const messages: { role: 'user' | 'assistant'; content: string }[] = []
 
-The user asked: "${userMessage}"
-
-Answer their question directly using the financial data above.`
+  if (history.length === 0) {
+    messages.push({ role: 'user', content: `${snapshotContext}The user asked: "${userMessage}"` })
+  } else {
+    // Prepend snapshot to the oldest user message so Claude always has data context
+    const [first, ...rest] = history
+    if (first) {
+      messages.push({
+        role: first.role,
+        content: first.role === 'user'
+          ? `${snapshotContext}${first.content}`
+          : first.content,
+      })
+    }
+    messages.push(...rest)
+    messages.push({ role: 'user', content: userMessage })
+  }
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -86,7 +109,7 @@ Answer their question directly using the financial data above.`
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
+        messages,
       }),
     })
 

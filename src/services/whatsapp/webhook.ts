@@ -1,10 +1,10 @@
-import { randomUUID } from 'crypto'
 import type { PrismaClient } from '@prisma/client'
 import { hashPhoneNumber, encrypt } from '../../lib/crypto.js'
 import { classifyIntent } from '../agent/classifier.js'
 import { routeIntent } from '../agent/router.js'
 import { trackEvent, hasAskedBefore } from '../analytics/events.js'
 import { handleOpportunityReply } from '../conversation/opportunityConversationHandler.js'
+import { getOrCreateSession, loadSessionHistory } from '../conversation/sessionService.js'
 import { config } from '../../config.js'
 
 // Intents that count as a real "data question" (not onboarding/unknown)
@@ -23,15 +23,18 @@ export interface ProcessedMessage {
   isNewUser: boolean
   intent: string
   response: string
+  sessionId: string
 }
 
 /**
  * Processes a verified inbound WhatsApp text message:
  * 1. Deduplicates by waMessageId (Meta may redeliver)
  * 2. Upserts the User by phone hash (raw phone never stored)
- * 3. Stores the inbound message as a 'user' Conversation row
- * 4. Classifies the message intent (rules → LLM fallback)
- * 5. Stores the assistant reply as an 'assistant' Conversation row
+ * 3. Resolves the active session (reuses if within 2h, new UUID otherwise)
+ * 4. Loads conversation history from the session for multi-turn AI context
+ * 5. Stores the inbound message as a 'user' Conversation row
+ * 6. Classifies the message intent (rules → LLM fallback)
+ * 7. Stores the assistant reply as an 'assistant' Conversation row
  */
 export async function processInboundMessage(
   prisma: PrismaClient,
@@ -71,7 +74,11 @@ export async function processInboundMessage(
     trackEvent(prisma, 'signup', user.id, { wabaId }).catch(() => undefined)
   }
 
-  const sessionId = randomUUID()
+  // Resolve session — reuse active session within 2h to enable multi-turn context
+  const sessionId = await getOrCreateSession(prisma, user.id)
+
+  // Load prior messages from this session for AI context
+  const history = await loadSessionHistory(prisma, user.id, sessionId)
 
   // Store inbound message
   const userConversation = await prisma.conversation.create({
@@ -106,6 +113,7 @@ export async function processInboundMessage(
       isNewUser,
       intent: 'opportunity_reply',
       response: opportunityResult.response,
+      sessionId,
     }
   }
 
@@ -116,7 +124,14 @@ export async function processInboundMessage(
   // Check first_question before we create the assistant row (so the count stays at 0 prior)
   const isFirstQuestion = isDataIntent ? !(await hasAskedBefore(prisma, user.id)) : false
 
-  const response = await routeIntent(classification.intent, text, user.id, prisma, config.ANTHROPIC_API_KEY)
+  const response = await routeIntent(
+    classification.intent,
+    text,
+    user.id,
+    prisma,
+    config.ANTHROPIC_API_KEY,
+    history,
+  )
 
   // Track product analytics events (fire-and-forget)
   if (isDataIntent) {
@@ -153,5 +168,6 @@ export async function processInboundMessage(
     isNewUser,
     intent: classification.intent,
     response,
+    sessionId,
   }
 }
