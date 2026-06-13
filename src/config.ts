@@ -57,6 +57,15 @@ const configSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
   WHATSAPP_VERIFY_TOKEN: z.string().default(''),
   WHATSAPP_APP_SECRET: z.string().default(''),
+
+  // Affiliate networks
+  AWIN_PUBLISHER_ID: z.string().default(''),
+  AWIN_API_KEY: z.string().default(''),
+  CJ_PUBLISHER_ID: z.string().default(''),
+  CJ_API_KEY: z.string().default(''),
+  IMPACT_ACCOUNT_SID: z.string().default(''),
+  IMPACT_AUTH_TOKEN: z.string().default(''),
+  AFFILIATE_POSTBACK_SECRET: z.string().default(''),
 })
 
 export type Config = z.infer<typeof configSchema>

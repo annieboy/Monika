@@ -87,6 +87,39 @@ enum RecurringStatus {
   paused
 }
 
+enum OpportunityStatus {
+  PENDING
+  SCHEDULED
+  DELIVERED
+  CLICKED
+  CONVERTED
+  DISMISSED
+  EXPIRED
+  SUPPRESSED
+}
+
+enum CommissionStatus {
+  PENDING
+  VALIDATED
+  APPROVED
+  PAID
+  REJECTED
+  REVERSED
+}
+
+enum AffiliateNetwork {
+  awin
+  cj
+  impact
+  direct
+}
+
+enum CommissionType {
+  cpa
+  cpl
+  revenue_share
+}
+
 enum TokenPurpose {
   bank_connect
   email_verify
@@ -128,14 +161,17 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
 
   // Relations
-  bankConnections  BankConnection[]
-  accounts         Account[]
-  transactions     Transaction[]
-  conversations    Conversation[]
-  monthlySummaries MonthlySummary[]
-  recurringPayments RecurringPayment[]
-  auditLogs        AuditLog[]
-  onboardingTokens OnboardingToken[]
+  bankConnections           BankConnection[]
+  accounts                  Account[]
+  transactions              Transaction[]
+  conversations             Conversation[]
+  monthlySummaries          MonthlySummary[]
+  recurringPayments         RecurringPayment[]
+  auditLogs                 AuditLog[]
+  onboardingTokens          OnboardingToken[]
+  opportunities             Opportunity[]
+  affiliateClicks           AffiliateClick[]
+  opportunityPreferences    UserOpportunityPreferences?
 
   @@map("users")
 }
@@ -368,24 +404,40 @@ model RecurringPayment {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   merchantName    String  @map("merchant_name") @db.VarChar(255)
-  typicalAmount   Decimal @map("typical_amount") @db.Decimal(15, 2)
+  merchantSlug    String  @map("merchant_slug") @db.VarChar(128)
+  merchantCategory String @default("other") @map("merchant_category") @db.VarChar(64)
+
+  typicalAmount   Decimal  @map("typical_amount") @db.Decimal(15, 2)
+  averageAmount   Decimal  @map("average_amount") @db.Decimal(15, 2)
+  minAmount       Decimal  @map("min_amount") @db.Decimal(15, 2)
+  maxAmount       Decimal  @map("max_amount") @db.Decimal(15, 2)
   amountVariance  Decimal? @map("amount_variance") @db.Decimal(15, 2)
+  currency        String   @default("GBP") @db.Char(3)
 
   frequency          RecurringFrequency
+  cadenceConfidence  Float   @default(0.5) @map("cadence_confidence")
   nextExpectedDate   DateTime?          @map("next_expected_date") @db.Date
 
   firstSeenDate   DateTime @map("first_seen_date") @db.Date
   lastSeenDate    DateTime @map("last_seen_date") @db.Date
   occurrenceCount Int      @default(1) @map("occurrence_count")
 
-  isConfirmed Boolean  @default(false) @map("is_confirmed")
-  userLabel   String?  @map("user_label") @db.VarChar(128)
-  status      RecurringStatus @default(active)
+  detectionMethod String  @default("amount_cluster") @map("detection_method") @db.VarChar(64)
+  isConfirmed     Boolean @default(false) @map("is_confirmed")
+  isActive        Boolean @default(true) @map("is_active")
+  userLabel       String? @map("user_label") @db.VarChar(128)
+  status          RecurringStatus @default(active)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
+  opportunities Opportunity[]
+
+  @@unique([userId, merchantSlug])
   @@index([userId, status])
+  @@index([userId, isActive])
+  @@index([merchantSlug])
+  @@index([nextExpectedDate])
   @@map("recurring_payments")
 }
 
@@ -434,4 +486,211 @@ model OnboardingToken {
 
   @@index([userId])
   @@map("onboarding_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPPORTUNITY ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OfferCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique @db.VarChar(64)
+  name        String   @db.VarChar(128)
+  description String?
+  iconEmoji   String?  @map("icon_emoji") @db.VarChar(8)
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  offers Offer[]
+
+  @@map("offer_categories")
+}
+
+model Offer {
+  id         String        @id @default(cuid())
+  categoryId String        @map("category_id")
+  category   OfferCategory @relation(fields: [categoryId], references: [id])
+
+  providerName    String  @map("provider_name") @db.VarChar(128)
+  providerSlug    String  @map("provider_slug") @db.VarChar(64)
+  providerLogoUrl String? @map("provider_logo_url") @db.VarChar(512)
+
+  title            String   @db.VarChar(200)
+  shortDescription String   @map("short_description") @db.VarChar(200)
+  keyBenefits      String[] @map("key_benefits")
+  keyTerms         String[] @map("key_terms")
+
+  // Category-specific parameters (shape varies by category)
+  // Savings:   { aer, accessType, minDeposit, maxDeposit, fscsProtected }
+  // Broadband: { speedMbps, contractMonths, monthlyPrice, setupFee }
+  // Mobile:    { dataGb, contractMonths, monthlyPrice, network }
+  // Accounting:{ monthlyPrice, tier, features, trialDays }
+  parameters Json
+
+  affiliateNetwork   AffiliateNetwork @map("affiliate_network")
+  affiliateProgramId String           @map("affiliate_program_id") @db.VarChar(128)
+  affiliateBaseUrl   String           @map("affiliate_base_url") @db.VarChar(1024)
+  commissionType     CommissionType   @map("commission_type")
+  commissionValue    Decimal          @map("commission_value") @db.Decimal(10, 4)
+  commissionCurrency String           @default("GBP") @map("commission_currency") @db.Char(3)
+  cookieDurationDays Int              @default(30) @map("cookie_duration_days")
+
+  // Matching — used by OpportunityDetector
+  targetMerchantSlugs String[] @map("target_merchant_slugs")
+  targetCategories    String[] @map("target_categories")
+  minMonthlySpend     Decimal? @map("min_monthly_spend") @db.Decimal(10, 2)
+  maxMonthlySpend     Decimal? @map("max_monthly_spend") @db.Decimal(10, 2)
+  // If false, offer is shown even to users without a connected bank account
+  requiresBankLink    Boolean  @default(false) @map("requires_bank_link")
+
+  fcaDisclaimer  String?  @map("fca_disclaimer")
+  isRegulated    Boolean  @default(false) @map("is_regulated")
+  regulatoryBody String?  @map("regulatory_body") @db.VarChar(32)
+
+  isActive             Boolean   @default(true) @map("is_active")
+  startsAt             DateTime? @map("starts_at") @db.Timestamptz()
+  expiresAt            DateTime? @map("expires_at") @db.Timestamptz()
+  lastRefreshedAt      DateTime  @default(now()) @map("last_refreshed_at") @db.Timestamptz()
+  refreshIntervalHours Int       @default(24) @map("refresh_interval_hours")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  opportunities   Opportunity[]
+  affiliateClicks AffiliateClick[]
+
+  @@index([categoryId])
+  @@index([providerSlug])
+  @@index([isActive, expiresAt])
+  @@map("offers")
+}
+
+model Opportunity {
+  id                 String            @id @default(cuid())
+  userId             String            @map("user_id") @db.Uuid
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offerId            String            @map("offer_id")
+  offer              Offer             @relation(fields: [offerId], references: [id])
+  recurringPaymentId String?           @map("recurring_payment_id") @db.Uuid
+  recurringPayment   RecurringPayment? @relation(fields: [recurringPaymentId], references: [id])
+
+  // "recurring_expense_match" | "balance_analysis" | "category_scan" | "no_bank_profile"
+  detectionMethod      String   @map("detection_method") @db.VarChar(64)
+  annualSavingEstimate Decimal? @map("annual_saving_estimate") @db.Decimal(10, 2)
+  savingConfidence     Float    @default(0.5) @map("saving_confidence")
+  relevanceScore       Float    @default(0.5) @map("relevance_score")
+  rankPosition         Int?     @map("rank_position")
+
+  status              OpportunityStatus @default(PENDING)
+  scheduledDeliveryAt DateTime?         @map("scheduled_delivery_at") @db.Timestamptz()
+  deliveredAt         DateTime?         @map("delivered_at") @db.Timestamptz()
+  expiresAt           DateTime?         @map("expires_at") @db.Timestamptz()
+
+  waMessageId   String?   @map("wa_message_id") @db.VarChar(255)
+  clickedAt     DateTime? @map("clicked_at") @db.Timestamptz()
+  convertedAt   DateTime? @map("converted_at") @db.Timestamptz()
+  dismissedAt   DateTime? @map("dismissed_at") @db.Timestamptz()
+  dismissReason String?   @map("dismiss_reason") @db.VarChar(64)
+
+  consentVerifiedAt DateTime? @map("consent_verified_at") @db.Timestamptz()
+  complianceFlags   String[]  @default([]) @map("compliance_flags")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  affiliateClicks AffiliateClick[]
+
+  @@unique([userId, offerId])
+  @@index([userId, status])
+  @@index([scheduledDeliveryAt])
+  @@index([relevanceScore(sort: Desc)])
+  @@map("opportunities")
+}
+
+model AffiliateClick {
+  id            String       @id @default(cuid())
+  userId        String       @map("user_id") @db.Uuid
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunityId String?      @map("opportunity_id")
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  offerId       String       @map("offer_id")
+  offer         Offer        @relation(fields: [offerId], references: [id])
+
+  clickRef  String @unique @map("click_ref") @db.VarChar(128)
+  shortCode String @unique @map("short_code") @db.VarChar(16)
+  platform  String @default("whatsapp") @db.VarChar(32)
+
+  redirectedToUrl String    @map("redirected_to_url") @db.VarChar(2048)
+  redirectedAt    DateTime? @map("redirected_at") @db.Timestamptz()
+
+  affiliateNetwork AffiliateNetwork @map("affiliate_network")
+  affiliateClickId String?          @map("affiliate_click_id") @db.VarChar(255)
+  transactionId    String?          @map("transaction_id") @db.VarChar(255)
+
+  commissionStatus   CommissionStatus @default(PENDING) @map("commission_status")
+  commissionAmount   Decimal?         @map("commission_amount") @db.Decimal(10, 4)
+  commissionCurrency String           @default("GBP") @map("commission_currency") @db.Char(3)
+  commissionLockedAt DateTime?        @map("commission_locked_at") @db.Timestamptz()
+
+  isSuspicious Boolean  @default(false) @map("is_suspicious")
+  fraudFlags   String[] @default([]) @map("fraud_flags")
+
+  postbackReceivedAt DateTime? @map("postback_received_at") @db.Timestamptz()
+  postbackPayload    Json?     @map("postback_payload")
+
+  clickedAt DateTime @default(now()) @map("clicked_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([userId])
+  @@index([offerId])
+  @@index([clickRef])
+  @@index([shortCode])
+  @@index([commissionStatus])
+  @@index([clickedAt(sort: Desc)])
+  @@map("affiliate_clicks")
+}
+
+model UserOpportunityPreferences {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  opportunitiesConsent Boolean   @default(false) @map("opportunities_consent")
+  consentGivenAt       DateTime? @map("consent_given_at") @db.Timestamptz()
+  consentMethod        String?   @map("consent_method") @db.VarChar(64)
+  consentWithdrawnAt   DateTime? @map("consent_withdrawn_at") @db.Timestamptz()
+
+  maxMessagesPerWeek  Int    @default(2) @map("max_messages_per_week")
+  maxMessagesPerMonth Int    @default(6) @map("max_messages_per_month")
+  quietHoursStart     String @default("21:00") @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd       String @default("08:00") @map("quiet_hours_end") @db.VarChar(5)
+
+  disabledCategories String[] @default([]) @map("disabled_categories")
+
+  lastMessageSentAt DateTime? @map("last_message_sent_at") @db.Timestamptz()
+  coolingOffUntil   DateTime? @map("cooling_off_until") @db.Timestamptz()
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("user_opportunity_preferences")
+}
+
+model OfferIngestionRun {
+  id            String    @id @default(cuid())
+  source        String    @db.VarChar(64)
+  status        String    @db.VarChar(16)
+  offersCreated Int       @default(0) @map("offers_created")
+  offersUpdated Int       @default(0) @map("offers_updated")
+  offersExpired Int       @default(0) @map("offers_expired")
+  errorCount    Int       @default(0) @map("error_count")
+  errors        Json?
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz()
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz()
+  triggeredBy   String?   @map("triggered_by") @db.VarChar(128)
+
+  @@index([source, startedAt(sort: Desc)])
+  @@map("offer_ingestion_runs")
 }

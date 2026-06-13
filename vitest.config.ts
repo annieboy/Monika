@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    include: ['src/**/*.test.ts'],
     // Load test environment variables before any test file runs
     setupFiles: ['./src/test/setup.ts'],
     // Each test file gets its own context — no shared state between files
