@@ -81,19 +81,22 @@ export function layout(title: string, body: string, breadcrumbs?: { label: strin
     .badge-red    { background: #fee2e2; color: #991b1b; }
     .badge-yellow { background: #fef9c3; color: #854d0e; }
     .badge-blue   { background: #dbeafe; color: #1e40af; }
-    .badge-gray   { background: #f1f5f9; color: #475569; }
+    .badge-gray, .badge-grey { background: #f1f5f9; color: #475569; }
     .badge-purple { background: #ede9fe; color: #5b21b6; }
 
     /* ── Forms ───────────────────────────────────────────────────── */
-    .search-bar { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
-    .search-bar input { flex: 1; padding: .5rem .875rem; border: 1px solid #e2e8f0;
-                        border-radius: .5rem; font-size: .875rem; outline: none;
-                        max-width: 420px; }
-    .search-bar input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
-    .search-bar button { padding: .5rem 1rem; background: #6366f1; color: #fff;
+    .search-bar, .filter-bar { display: flex; gap: .5rem; margin-bottom: 1.5rem;
+                                align-items: center; flex-wrap: wrap; }
+    .search-bar input, .filter-bar input, .filter-bar select {
+      padding: .5rem .875rem; border: 1px solid #e2e8f0;
+      border-radius: .5rem; font-size: .875rem; outline: none; }
+    .search-bar input { flex: 1; max-width: 420px; }
+    .search-bar input:focus, .filter-bar input:focus, .filter-bar select:focus {
+      border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .search-bar button, .filter-bar button { padding: .5rem 1rem; background: #6366f1; color: #fff;
                          border: none; border-radius: .5rem; cursor: pointer;
                          font-size: .875rem; font-weight: 500; }
-    .search-bar button:hover { background: #4f46e5; }
+    .search-bar button:hover, .filter-bar button:hover { background: #4f46e5; }
 
     /* ── Links ───────────────────────────────────────────────────── */
     a.row-link { color: #6366f1; text-decoration: none; font-weight: 500; }
@@ -128,6 +131,38 @@ export function layout(title: string, body: string, breadcrumbs?: { label: strin
     /* ── JSON block ──────────────────────────────────────────────── */
     pre.json { background: #0f172a; color: #94a3b8; padding: 1rem; border-radius: .5rem;
                font-size: .78rem; overflow-x: auto; line-height: 1.5; }
+
+    /* ── Utility ─────────────────────────────────────────────────── */
+    .muted { color: #94a3b8; font-size: .8rem; }
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header h1 { font-size: 1.25rem; font-weight: 700; }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn-sm { display: inline-block; padding: .3rem .7rem; border-radius: .375rem;
+              font-size: .8rem; font-weight: 500; cursor: pointer; text-decoration: none;
+              border: 1px solid #e2e8f0; background: #fff; color: #374151; }
+    .btn-sm:hover { background: #f1f5f9; }
+    .btn-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .btn-danger:hover { background: #fecaca; }
+
+    /* ── Stat grid (opportunity / analytics pages) ───────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                 gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem;
+                 padding: 1.25rem; }
+    .stat-card .stat-label { font-size: .75rem; color: #64748b; font-weight: 500;
+                              text-transform: uppercase; letter-spacing: .05em; margin-bottom: .5rem; }
+    .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; }
+    .stat-sub { font-size: 1rem; font-weight: 400; color: #64748b; }
+
+    /* ── Data table alias ────────────────────────────────────────── */
+    table.data-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    table.data-table thead th { background: #f1f5f9; padding: .75rem 1rem; text-align: left;
+               font-size: .75rem; text-transform: uppercase; letter-spacing: .06em;
+               color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+    table.data-table tbody td { padding: .75rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    table.data-table tbody tr:hover td { background: #f8fafc; }
+    table.data-table tbody tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
