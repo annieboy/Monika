@@ -115,6 +115,7 @@ export async function userDetailPage(prisma: PrismaClient, userId: string): Prom
           // Never select the token value itself
         },
       },
+      opportunityPreferences: true,
       _count: { select: { transactions: true } },
     },
   })
@@ -230,6 +231,33 @@ export async function userDetailPage(prisma: PrismaClient, userId: string): Prom
       <div style="margin-top:1rem">
         <a class="row-link" href="/admin/transactions?userId=${user.id}">View all transactions →</a>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Opportunity preferences</div>
+      ${user.opportunityPreferences ? (() => {
+        const p = user.opportunityPreferences
+        const consentBadge = p.opportunitiesConsent
+          ? badge('opted in', 'green')
+          : p.consentWithdrawnAt
+            ? badge('opted out', 'red')
+            : badge('no response', 'gray')
+        const coolingOff = p.coolingOffUntil && p.coolingOffUntil > new Date()
+          ? `${badge('cooling off', 'yellow')} until ${fmtDate(p.coolingOffUntil)}`
+          : '—'
+        return `<dl class="detail-grid">
+          <dt>Consent</dt><dd>${consentBadge}</dd>
+          <dt>Opted in at</dt><dd>${fmtDate(p.consentGivenAt)}</dd>
+          <dt>Opted out at</dt><dd>${p.consentWithdrawnAt ? fmtDate(p.consentWithdrawnAt) : '—'}</dd>
+          <dt>Method</dt><dd>${p.consentMethod ? esc(p.consentMethod) : '—'}</dd>
+          <dt>Cooling off</dt><dd>${coolingOff}</dd>
+          <dt>Last message sent</dt><dd>${fmtDate(p.lastMessageSentAt)}</dd>
+          <dt>Weekly cap</dt><dd>${p.maxMessagesPerWeek} / week</dd>
+          <dt>Monthly cap</dt><dd>${p.maxMessagesPerMonth} / month</dd>
+          <dt>Quiet hours</dt><dd>${esc(p.quietHoursStart)} – ${esc(p.quietHoursEnd)}</dd>
+          ${p.disabledCategories.length ? `<dt>Disabled categories</dt><dd>${(p.disabledCategories as string[]).map(c => badge(c, 'yellow')).join(' ')}</dd>` : ''}
+        </dl>`
+      })() : '<p style="color:#64748b">Not yet created — user has not been shown consent prompt</p>'}
     </div>
 
     <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Bank connections</h2>
