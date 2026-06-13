@@ -101,7 +101,7 @@ describe('validateAndConsumeToken', () => {
 
     const txFn = vi.mocked(prisma.$transaction)
     // Reconstruct the tx object that was passed to the transaction callback
-    const txArg = txFn.mock.calls[0]![0] as (tx: { onboardingToken: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } }) => Promise<unknown>
+    const txArg = txFn.mock.calls[0]![0] as unknown as (tx: { onboardingToken: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } }) => Promise<unknown>
     // Invoke again to inspect update call
     const fakeUpdate = vi.fn().mockResolvedValue({})
     const fakeFindUnique = vi.fn().mockResolvedValue(validRecord())
