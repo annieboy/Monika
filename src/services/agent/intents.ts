@@ -8,6 +8,7 @@ export const INTENTS = [
   'account_balance',
   'income_query',
   'savings_query',
+  'savings_goal',
   'upcoming_bills',
   'payment_request',
   'onboarding_help',

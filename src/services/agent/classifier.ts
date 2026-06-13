@@ -67,6 +67,18 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'savings_goal',
+    patterns: [
+      /i\s+want\s+to\s+save/i,
+      /set\s+(?:a\s+)?savings?\s+goal/i,
+      /saving\s+(?:up\s+)?for/i,
+      /save\s+(?:up\s+)?for/i,
+      /my\s+savings?\s+goals?/i,
+      /savings?\s+target/i,
+      /how\s+am\s+i\s+doing\s+on\s+my\s+goal/i,
+    ],
+  },
+  {
     intent: 'upcoming_bills',
     patterns: [
       /upcoming\s+bills?/i,

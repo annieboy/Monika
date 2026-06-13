@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import {
   isOptOutMessage,
@@ -63,8 +63,10 @@ describe('isOptOutMessage', () => {
 
 // ── checkDeliveryEligibility helpers ─────────────────────────────────────────
 
-const FUTURE = new Date(Date.now() + 7 * 86_400_000)
-const PAST = new Date(Date.now() - 7 * 86_400_000)
+// Pinned relative to the fake clock time used in beforeEach (2024-03-15T14:00:00Z)
+const FAKE_NOW = new Date('2024-03-15T14:00:00Z')
+const FUTURE = new Date(FAKE_NOW.getTime() + 7 * 86_400_000)
+const PAST = new Date(FAKE_NOW.getTime() - 7 * 86_400_000)
 
 interface PrefsShape {
   opportunitiesConsent: boolean
@@ -110,6 +112,16 @@ function makePrisma(opts: {
 // ── checkDeliveryEligibility ──────────────────────────────────────────────────
 
 describe('checkDeliveryEligibility', () => {
+  beforeEach(() => {
+    // Pin to 14:00 UTC — safely outside the default 21:00–08:00 quiet window
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-03-15T14:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('returns eligible when all checks pass', async () => {
     const prisma = makePrisma({})
     const result = await checkDeliveryEligibility(prisma, 'user-1')

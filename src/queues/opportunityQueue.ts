@@ -12,6 +12,7 @@ import { createRedisConnection } from './connection.js'
 export type OpportunityJobName =
   | 'detect-opportunities'
   | 'deliver-opportunities'
+  | 'bill-reminders'
   | 'expire-offers'
   | 'reconcile-commissions'
 
@@ -72,6 +73,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
     {
       name: 'deliver-opportunities',
       data: {} satisfies DeliverOpportunitiesData,
+      opts: { priority: 2 },
+    },
+  )
+
+  // Daily at 08:00 UTC — proactive bill due reminders
+  await queue.upsertJobScheduler(
+    'daily-bill-reminders',
+    { pattern: '0 8 * * *', tz: 'UTC' },
+    {
+      name: 'bill-reminders',
+      data: {},
       opts: { priority: 2 },
     },
   )
