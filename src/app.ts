@@ -28,6 +28,7 @@ import devRoutes from './routes/dev/index.js'
 import userRoutes from './routes/users/index.js'
 import legalRoutes from './routes/legal/index.js'
 import landingRoutes from './routes/landing/index.js'
+import affiliateRoutes from './routes/affiliate.js'
 
 export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   const app = Fastify({
@@ -99,6 +100,7 @@ export async function buildApp(): Promise<ReturnType<typeof Fastify>> {
   await app.register(userRoutes, { prefix: '/users' })
   await app.register(legalRoutes)
   await app.register(landingRoutes)
+  await app.register(affiliateRoutes)
 
   if (config.NODE_ENV !== 'production') {
     await app.register(devRoutes, { prefix: '/dev' })

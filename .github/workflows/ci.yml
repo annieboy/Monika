@@ -37,37 +37,32 @@ jobs:
           --health-retries 5
 
     env:
-      APP_ENV: test
-      LOG_LEVEL: WARNING
-      DATABASE_URL: postgresql+asyncpg://monika:monika@localhost:5432/monika_test
-      DATABASE_URL_SYNC: postgresql://monika:monika@localhost:5432/monika_test
-      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      DATABASE_URL: postgresql://monika:monika@localhost:5432/monika_test
       SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       ENCRYPTION_KEY_VERSION: "1"
+      ANTHROPIC_API_KEY: "sk-ant-test000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      WHATSAPP_PHONE_NUMBER_ID: "test"
+      WHATSAPP_ACCESS_TOKEN: "test"
+      WHATSAPP_VERIFY_TOKEN: "test-verify-token"
+      WHATSAPP_APP_SECRET: "test-app-secret"
+      APP_BASE_URL: "http://localhost:3000"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          version: "0.8.17"
-
-      - name: Set up Python
-        run: uv python install 3.11
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: npm ci
 
-      - name: Lint (ruff)
-        run: uv run ruff check backend/
-
-      - name: Format check (ruff)
-        run: uv run ruff format --check backend/
-
-      - name: Type check (mypy)
-        run: uv run mypy backend/ --exclude backend/tests
+      - name: Type-check
+        run: npm run build
 
       - name: Run tests
-        run: uv run pytest backend/tests/ -v
+        run: npm test
