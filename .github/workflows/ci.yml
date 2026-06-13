@@ -46,7 +46,7 @@ jobs:
       WHATSAPP_PHONE_NUMBER_ID: "test"
       WHATSAPP_ACCESS_TOKEN: "test"
       WHATSAPP_VERIFY_TOKEN: "test"
-      WHATSAPP_APP_SECRET: "test-app-secret-32-chars-minimum!!"
+      WHATSAPP_APP_SECRET: "test-app-secret"
       APP_BASE_URL: "http://localhost:3000"
 
     steps:
