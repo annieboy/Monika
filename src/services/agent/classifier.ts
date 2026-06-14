@@ -156,6 +156,61 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'budget',
+    patterns: [
+      /set\s+(?:a\s+|my\s+)?(?:£[\d,]+\s+)?budget\s+(?:for|to)/i,
+      /budget\s+(?:£[\d,]+\s+for|for\s+my)/i,
+      /£[\d,]+\s+(?:budget|limit)\s+for/i,
+      /my\s+budgets?/i,
+      /show\s+(?:me\s+)?(?:my\s+)?budgets?/i,
+      /what(?:'s|\s+is)\s+my\s+\w+\s+budget/i,
+      /spending\s+limit/i,
+    ],
+  },
+  {
+    intent: 'financial_health',
+    patterns: [
+      /financial\s+health/i,
+      /how\s+(am\s+i\s+doing\s+financially|is\s+my\s+financial\s+health)/i,
+      /my\s+financial\s+score/i,
+      /money\s+health/i,
+      /overall\s+financial\s+(position|health|status)/i,
+    ],
+  },
+  {
+    intent: 'spending_forecast',
+    patterns: [
+      /how\s+much\s+will\s+i\s+spend\s+(this|by\s+end\s+of)\s+month/i,
+      /spending\s+forecast/i,
+      /projected?\s+spend/i,
+      /on\s+track\s+(for|to\s+spend)/i,
+      /end\s+of\s+month\s+spend/i,
+      /how\s+much\s+am\s+i\s+on\s+track\s+to\s+spend/i,
+    ],
+  },
+  {
+    intent: 'spending_trends',
+    patterns: [
+      /how\s+is\s+my\s+spending\s+trending/i,
+      /spending\s+trend/i,
+      /trending\s+up\s+on/i,
+      /am\s+i\s+spending\s+more/i,
+      /spending\s+going\s+up/i,
+      /categories?\s+(going|trending)\s+up/i,
+    ],
+  },
+  {
+    intent: 'net_worth',
+    patterns: [
+      /net\s+worth/i,
+      /what\s+am\s+i\s+worth/i,
+      /how\s+much\s+am\s+i\s+worth/i,
+      /total\s+(assets?|wealth)/i,
+      /assets?\s+(vs?|versus|minus)\s+liabilit/i,
+      /overall\s+financial\s+position/i,
+    ],
+  },
+  {
     intent: 'account_management',
     patterns: [
       /stop\s+(sending|messages|offers|notifications|tips)/i,

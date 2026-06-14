@@ -18,6 +18,11 @@ import {
 import { answerWithAI } from './conversational.js'
 import { parseGoalFromMessage, createGoal, listGoals } from '../savings/savingsGoalService.js'
 import { handleAccountManagement } from '../account/accountManagementService.js'
+import { handleBudget } from '../budget/budgetService.js'
+import { calculateNetWorth, formatNetWorth } from '../analytics/netWorthService.js'
+import { getSpendingTrends, formatSpendingTrends } from '../analytics/spendingTrendService.js'
+import { getSpendingForecast, formatSpendingForecast } from '../analytics/spendingForecastService.js'
+import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytics/financialHealthService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -80,6 +85,11 @@ export async function routeIntent(
   // Account management — works without bank connection
   if (intent === 'account_management') {
     return handleAccountManagement(prisma, userId, message)
+  }
+
+  // Budget management — works without bank connection (budgets stored in auditLog)
+  if (intent === 'budget') {
+    return handleBudget(prisma, userId, message)
   }
 
   // Savings goals — handled before bank check (listing works without bank)
@@ -203,6 +213,30 @@ export async function routeIntent(
     case 'upcoming_bills': {
       const subscriptions = await analytics.getSubscriptions(userId)
       structuredText = formatUpcomingBills(subscriptions, 0)
+      break
+    }
+
+    case 'net_worth': {
+      const breakdown = await calculateNetWorth(prisma, userId)
+      structuredText = formatNetWorth(breakdown)
+      break
+    }
+
+    case 'spending_trends': {
+      const trendResult = await getSpendingTrends(prisma, userId)
+      structuredText = formatSpendingTrends(trendResult)
+      break
+    }
+
+    case 'spending_forecast': {
+      const forecast = await getSpendingForecast(prisma, userId)
+      structuredText = formatSpendingForecast(forecast)
+      break
+    }
+
+    case 'financial_health': {
+      const healthScore = await getFinancialHealthScore(prisma, userId)
+      structuredText = formatFinancialHealthScore(healthScore)
       break
     }
 

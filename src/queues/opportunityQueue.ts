@@ -18,6 +18,9 @@ export type OpportunityJobName =
   | 'goal-progress-check'
   | 'weekly-digest'
   | 'expiry-nudge'
+  | 'prune-sessions'
+  | 'spending-trend-alerts'
+  | 'reconnect-nudge'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -141,6 +144,39 @@ export async function scheduleRecurringJobs(): Promise<void> {
     { pattern: '0 */6 * * *', tz: 'UTC' },
     {
       name: 'expiry-nudge',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Nightly at 01:00 UTC — delete conversation rows older than 90 days
+  await queue.upsertJobScheduler(
+    'nightly-prune-sessions',
+    { pattern: '0 1 * * *', tz: 'UTC' },
+    {
+      name: 'prune-sessions',
+      data: {},
+      opts: { priority: 4 },
+    },
+  )
+
+  // Every 6 hours — nudge users whose bank connection has been failing for 3+ days
+  await queue.upsertJobScheduler(
+    'reconnect-nudge',
+    { pattern: '0 */6 * * *', tz: 'UTC' },
+    {
+      name: 'reconnect-nudge',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Monthly on the 5th at 10:00 UTC — alert users about rising spending categories
+  await queue.upsertJobScheduler(
+    'monthly-spending-trend-alerts',
+    { pattern: '0 10 5 * *', tz: 'UTC' },
+    {
+      name: 'spending-trend-alerts',
       data: {},
       opts: { priority: 3 },
     },
