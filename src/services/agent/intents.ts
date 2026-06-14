@@ -18,6 +18,7 @@ export const INTENTS = [
   'financial_health',
   'account_management',
   'onboarding_help',
+  'transaction_search',
   'unknown',
 ] as const
 

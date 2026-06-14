@@ -23,6 +23,7 @@ import { calculateNetWorth, formatNetWorth } from '../analytics/netWorthService.
 import { getSpendingTrends, formatSpendingTrends } from '../analytics/spendingTrendService.js'
 import { getSpendingForecast, formatSpendingForecast } from '../analytics/spendingForecastService.js'
 import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytics/financialHealthService.js'
+import { parseTransactionSearch, searchTransactions, formatTransactionSearch } from '../analytics/transactionSearchService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -237,6 +238,17 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'transaction_search': {
+      const filters = parseTransactionSearch(message)
+      if (!filters) {
+        structuredText = `What would you like to search for? Try: *"Show me transactions at Tesco last month"* or *"Find purchases over £50 this month"*.`
+      } else {
+        const results = await searchTransactions(prisma, userId, filters)
+        structuredText = formatTransactionSearch(results, filters)
+      }
       break
     }
 

@@ -211,6 +211,19 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'transaction_search',
+    patterns: [
+      /show\s+(me\s+)?my\s+transactions/i,
+      /find\s+(my\s+)?transactions?/i,
+      /list\s+(my\s+)?transactions?/i,
+      /search\s+(my\s+)?transactions?/i,
+      /transactions?\s+(at|from|on)\s+/i,
+      /what\s+did\s+i\s+(buy|purchase|pay\s+for)/i,
+      /recent\s+transactions?/i,
+      /show\s+(me\s+)?purchases?/i,
+    ],
+  },
+  {
     intent: 'account_management',
     patterns: [
       /stop\s+(sending|messages|offers|notifications|tips)/i,
