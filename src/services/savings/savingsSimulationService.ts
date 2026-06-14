@@ -52,7 +52,11 @@ export function parseSimulation(message: string): SimulationInput | null {
   const goalMatch = message.match(/for\s+(?:my\s+|a\s+|an\s+)?([\w\s]+?)(?:\s*\?|$|\s+goal)/i)
   const goalName = goalMatch?.[1]?.trim()
 
-  return { monthlySaving, targetAmount, goalName }
+  return {
+    monthlySaving,
+    ...(targetAmount !== undefined ? { targetAmount } : {}),
+    ...(goalName !== undefined ? { goalName } : {}),
+  }
 }
 
 // ── Simulation engine ─────────────────────────────────────────────────────────

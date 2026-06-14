@@ -9,7 +9,7 @@
  *   - Amount threshold ("over £50", "more than £100")
  *   - Transaction type ("income", "refunds")
  */
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Prisma } from '@prisma/client'
 
 export interface TransactionSearchFilters {
   merchantName?: string
@@ -115,7 +115,7 @@ export async function searchTransactions(
   userId: string,
   filters: TransactionSearchFilters,
 ): Promise<TransactionSearchResult[]> {
-  const where: Parameters<typeof prisma.transaction.findMany>[0]['where'] = { userId }
+  const where: Prisma.TransactionWhereInput = { userId }
 
   if (filters.merchantName) {
     where.OR = [
@@ -137,7 +137,7 @@ export async function searchTransactions(
 
   if (filters.amountGte !== undefined || filters.amountLte !== undefined) {
     // amount is negative for debits; use absolute value via AND condition
-    const amtConditions: Parameters<typeof prisma.transaction.findMany>[0]['where'][] = []
+    const amtConditions: Prisma.TransactionWhereInput[] = []
     if (filters.amountGte !== undefined) {
       amtConditions.push({ amount: { lte: -filters.amountGte } })  // debit: -£60 ≤ -£50
     }

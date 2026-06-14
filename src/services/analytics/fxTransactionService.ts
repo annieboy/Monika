@@ -19,7 +19,6 @@ export interface FxTransaction {
   merchant: string | null
   gbpAmount: number
   foreignCurrency: string | null
-  foreignAmount: number | null
   description: string | null
 }
 
@@ -63,10 +62,8 @@ export async function getFxTransactions(
       transactionDate: { gte: since },
       amount: { lt: 0 },
       OR: [
-        { foreignCurrency: { not: null } },
         { rawDescription: { contains: 'USD', mode: 'insensitive' } },
         { rawDescription: { contains: 'EUR', mode: 'insensitive' } },
-        { rawDescription: { contains: 'USD' } },
         { cleanDescription: { contains: 'USD' } },
         { cleanDescription: { contains: 'EUR' } },
       ],
@@ -78,8 +75,6 @@ export async function getFxTransactions(
       merchantNameClean: true,
       merchantName: true,
       amount: true,
-      foreignCurrency: true,
-      foreignAmount: true,
       cleanDescription: true,
       rawDescription: true,
     },
@@ -91,7 +86,6 @@ export async function getFxTransactions(
       userId,
       transactionDate: { gte: since },
       amount: { lt: 0 },
-      foreignCurrency: null, // already got those above
     },
     orderBy: { transactionDate: 'desc' },
     select: {
@@ -100,8 +94,6 @@ export async function getFxTransactions(
       merchantNameClean: true,
       merchantName: true,
       amount: true,
-      foreignCurrency: true,
-      foreignAmount: true,
       cleanDescription: true,
       rawDescription: true,
     },
@@ -125,14 +117,13 @@ export async function getFxTransactions(
 
   const transactions: FxTransaction[] = combined.map(r => {
     const desc = r.cleanDescription ?? r.rawDescription ?? ''
-    const currency = r.foreignCurrency ?? detectCurrency(desc)
+    const currency = detectCurrency(desc)
     return {
       id: r.id,
       date: r.transactionDate,
       merchant: r.merchantNameClean ?? r.merchantName ?? null,
       gbpAmount: Math.abs(Number(r.amount)),
       foreignCurrency: currency,
-      foreignAmount: r.foreignAmount ? Math.abs(Number(r.foreignAmount)) : null,
       description: desc || null,
     }
   })

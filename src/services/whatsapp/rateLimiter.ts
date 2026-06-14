@@ -18,7 +18,7 @@
  *     await limiter.recordProactive(userId)
  *   }
  */
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Prisma } from '@prisma/client'
 
 export const PROACTIVE_DAILY_LIMIT = 5
 export const BURST_WINDOW_MS = 60_000      // 1 minute
@@ -77,7 +77,7 @@ export class WhatsAppRateLimiter {
         userId,
         eventType: 'proactive_message_sent',
         serviceName: 'whatsapp-rate-limiter',
-        eventData: meta,
+        eventData: meta as Prisma.InputJsonValue,
       },
     })
   }
