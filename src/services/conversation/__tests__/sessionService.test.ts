@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import { getOrCreateSession, loadSessionHistory, SESSION_TIMEOUT_MS, MAX_HISTORY_MESSAGES } from '../sessionService.js'
 

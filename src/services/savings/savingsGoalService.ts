@@ -55,7 +55,7 @@ export function parseGoalFromMessage(message: string): GoalParseResult | null {
   return { name, targetAmount, targetDate, monthlySavings }
 }
 
-const fmt = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const fmt = (n: number): string => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export async function createGoal(
   prisma: PrismaClient,

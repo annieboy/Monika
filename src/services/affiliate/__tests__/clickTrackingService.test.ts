@@ -5,7 +5,7 @@
  * click-record creation, redirect recording, fraud detection, and postback
  * commission updates. Revenue accuracy depends on this code — do not weaken.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 
 vi.mock('../../../config.js', () => ({

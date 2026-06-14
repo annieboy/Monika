@@ -6,7 +6,7 @@
  * haven't messaged recently, and prevents token expiry.
  */
 import type { PrismaClient } from '@prisma/client'
-import { decrypt, encrypt } from '../../lib/crypto.js'
+import { decrypt } from '../../lib/crypto.js'
 import { TrueLayerProvider } from '../../banking/providers/truelayer.js'
 import { runFullSync } from '../../banking/sync.js'
 import { config } from '../../config.js'

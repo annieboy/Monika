@@ -38,7 +38,7 @@ describe('reconcileCommissions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset all API keys to empty (no-op)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const c = config as any
     c.AWIN_API_KEY = ''
     c.AWIN_PUBLISHER_ID = ''
@@ -70,7 +70,7 @@ describe('reconcileCommissions', () => {
   })
 
   it('updates commission status when API returns new status', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     Object.assign(config as any, { AWIN_API_KEY: 'test-key', AWIN_PUBLISHER_ID: '12345' })
 
     const clicks = [
@@ -94,7 +94,7 @@ describe('reconcileCommissions', () => {
   })
 
   it('does not update when API status matches current status', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     Object.assign(config as any, { AWIN_API_KEY: 'test-key', AWIN_PUBLISHER_ID: '12345' })
 
     const clicks = [
@@ -114,7 +114,7 @@ describe('reconcileCommissions', () => {
   })
 
   it('continues gracefully when API call fails', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     Object.assign(config as any, { AWIN_API_KEY: 'test-key', AWIN_PUBLISHER_ID: '12345' })
 
     const clicks = [
@@ -132,7 +132,7 @@ describe('reconcileCommissions', () => {
   })
 
   it('handles non-ok API response gracefully', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     Object.assign(config as any, { AWIN_API_KEY: 'test-key', AWIN_PUBLISHER_ID: '12345' })
 
     const clicks = [
@@ -149,7 +149,7 @@ describe('reconcileCommissions', () => {
   })
 
   it('sets commissionLockedAt when commission is APPROVED', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     Object.assign(config as any, { AWIN_API_KEY: 'test-key', AWIN_PUBLISHER_ID: '12345' })
 
     const clicks = [

@@ -34,7 +34,7 @@ vi.mock('../../../config.js', () => ({
 
 import { deleteUser, exportUserData } from '../deletion.js'
 import { logConsentEvent } from '../../onboarding/audit.js'
-import { TrueLayerProvider } from '../../../banking/providers/truelayer.js'
+import type { TrueLayerProvider } from '../../../banking/providers/truelayer.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

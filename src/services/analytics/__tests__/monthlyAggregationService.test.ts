@@ -68,7 +68,7 @@ describe('runMonthlyAggregationBatch', () => {
     const p = makePrisma({})
     await runMonthlyAggregationBatch(p)
     const calls = (p as unknown as { monthlySummary: { upsert: ReturnType<typeof vi.fn> } }).monthlySummary.upsert.mock.calls
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const yearMonths = calls.map((c: any[]) => (c[0] as { where: { userId_yearMonth: { yearMonth: string } } }).where.userId_yearMonth.yearMonth)
     expect(yearMonths).toContain('2026-03')
     expect(yearMonths).toContain('2026-02')
@@ -79,7 +79,7 @@ describe('runMonthlyAggregationBatch', () => {
     const p = makePrisma({})
     await runMonthlyAggregationBatch(p)
     const calls = (p as unknown as { monthlySummary: { upsert: ReturnType<typeof vi.fn> } }).monthlySummary.upsert.mock.calls
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const yearMonths = calls.map((c: any[]) => (c[0] as { where: { userId_yearMonth: { yearMonth: string } } }).where.userId_yearMonth.yearMonth)
     expect(yearMonths).toContain('2026-01')
     expect(yearMonths).toContain('2025-12')
@@ -90,7 +90,7 @@ describe('runMonthlyAggregationBatch', () => {
     const p = makePrisma({})
     await runMonthlyAggregationBatch(p)
     const calls = (p as unknown as { monthlySummary: { upsert: ReturnType<typeof vi.fn> } }).monthlySummary.upsert.mock.calls
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const totalSpend = (calls[0] as any[])[0].create.totalSpend as number
     expect(totalSpend).toBeGreaterThanOrEqual(0)
   })
