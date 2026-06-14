@@ -21,6 +21,7 @@ export type OpportunityJobName =
   | 'prune-sessions'
   | 'spending-trend-alerts'
   | 'reconnect-nudge'
+  | 'budget-alerts'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -166,6 +167,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
     { pattern: '0 */6 * * *', tz: 'UTC' },
     {
       name: 'reconnect-nudge',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Daily at 12:00 UTC — budget threshold alerts (80% / 100%)
+  await queue.upsertJobScheduler(
+    'daily-budget-alerts',
+    { pattern: '0 12 * * *', tz: 'UTC' },
+    {
+      name: 'budget-alerts',
       data: {},
       opts: { priority: 2 },
     },

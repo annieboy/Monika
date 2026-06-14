@@ -22,6 +22,7 @@ import { runExpiryNudgeBatch } from '../services/notifications/expiryNudgeServic
 import { pruneOldSessions } from '../services/conversation/sessionService.js'
 import { runSpendingTrendAlertBatch } from '../services/analytics/spendingTrendService.js'
 import { runReconnectNudgeBatch } from '../services/banking/reconnectNudgeService.js'
+import { runBudgetAlertBatch } from '../services/budget/budgetAlertService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -142,6 +143,11 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
         case 'reconnect-nudge': {
           const result = await runReconnectNudgeBatch(prisma)
           return { processed: result.nudged, errors: result.errors }
+        }
+
+        case 'budget-alerts': {
+          const result = await runBudgetAlertBatch(prisma)
+          return { processed: result.alerted, errors: result.errors }
         }
 
         default: {
