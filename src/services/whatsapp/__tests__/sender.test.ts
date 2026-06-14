@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { sendWhatsAppMessage, SendError } from '../sender.js'
+import { sendWhatsAppMessage } from '../sender.js'
 
 const PHONE_NUMBER_ID = 'pnid-123'
 const ACCESS_TOKEN = 'token-abc'
@@ -72,7 +72,7 @@ describe('sendWhatsAppMessage', () => {
   })
 
   it('retries on 5xx and succeeds on second attempt', async () => {
-    const fetchMock = mockFetch([
+    const _fetchMock = mockFetch([
       { ok: false, status: 500, body: 'Internal Server Error' },
       { ok: true, status: 200, body: makeSuccessResponse('wamid.retry') },
     ])

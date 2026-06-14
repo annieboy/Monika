@@ -22,7 +22,7 @@ export interface GoalProgressResult {
 
 const MILESTONES = [25, 50, 75, 100] as const
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 function milestone(pct: number): 25 | 50 | 75 | 100 | null {

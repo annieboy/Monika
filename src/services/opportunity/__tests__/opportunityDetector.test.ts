@@ -9,7 +9,7 @@
  * upsertOpportunity idempotency: CONVERTED and DISMISSED opportunities must
  * never be re-surfaced; PENDING/DELIVERED ones should be refreshed.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import { detectOpportunities } from '../opportunityDetector.js'
 
@@ -178,7 +178,7 @@ describe('detectOpportunities — recurring_expense_match', () => {
 
 describe('detectOpportunities — balance_analysis', () => {
   it('skips accounts with balance below £1000', async () => {
-    const prisma = makePrisma({
+    const _prisma = makePrisma({
       recurringPayments: [],
       accounts: [makeAccount(500)],
       savingsOffers: [makeSavingsOffer()],

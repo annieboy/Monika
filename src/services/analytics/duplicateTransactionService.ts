@@ -120,10 +120,10 @@ export async function detectDuplicateTransactions(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-const fmtDate = (d: Date) =>
+const fmtDate = (d: Date): string =>
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 export function formatDuplicateTransactions(groups: DuplicateGroup[]): string {

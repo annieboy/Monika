@@ -24,7 +24,7 @@ export interface WeeklyDigestResult {
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 async function getPhone(prisma: PrismaClient, userId: string): Promise<string | null> {

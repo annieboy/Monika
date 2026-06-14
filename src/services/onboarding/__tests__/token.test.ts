@@ -6,7 +6,7 @@
  *   atomic consume (update called exactly once), serialization failure
  *   treated as already_used.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import { generateOnboardingToken, validateAndConsumeToken } from '../token.js'
 

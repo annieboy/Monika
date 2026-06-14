@@ -8,7 +8,7 @@
  *   GET  /admin/api/opportunities/stats — shape of response
  *   POST /admin/api/jobs/trigger        — valid job / unknown job
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { registerAdminApiRoutes } from '../api.js'
@@ -208,7 +208,7 @@ describe('POST /api/jobs/trigger', () => {
 
   it('passes userId in job data when provided', async () => {
     const { getOpportunityQueue } = await import('../../../queues/opportunityQueue.js')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const addMock = (getOpportunityQueue() as any).add as ReturnType<typeof vi.fn>
     const app = await buildApp()
     await app.inject({

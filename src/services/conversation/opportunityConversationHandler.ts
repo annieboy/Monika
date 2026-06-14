@@ -14,7 +14,7 @@
  * Returns null if the message is not an opportunity reply — caller falls through
  * to the main intent router.
  */
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Prisma } from '@prisma/client'
 import { isOptOutMessage, recordOptOut, recordOptIn } from '../compliance/consentService.js'
 import { buildDetailMessage, CONSENT_CONFIRMED, CONSENT_DECLINED } from '../opportunity/opportunityMessageBuilder.js'
 import { generateClickUrl } from '../affiliate/clickTrackingService.js'
@@ -66,10 +66,14 @@ function parseReminderDate(text: string): Date | null {
 
 // ── Pending opportunity lookup ──────────────────────────────────────────────
 
+type DeliveredOpportunity = Prisma.OpportunityGetPayload<{
+  include: { offer: { include: { category: true } }; recurringPayment: true }
+}>
+
 async function getMostRecentDeliveredOpportunity(
   prisma: PrismaClient,
   userId: string,
-) {
+): Promise<DeliveredOpportunity | null> {
   const cutoff = new Date(Date.now() - REPLY_WINDOW_HOURS * 3_600_000)
   return prisma.opportunity.findFirst({
     where: {
@@ -82,11 +86,13 @@ async function getMostRecentDeliveredOpportunity(
   })
 }
 
+type OfferWithCategory = Prisma.OfferGetPayload<{ include: { category: true } }>
+
 async function getAlternativeOffers(
   prisma: PrismaClient,
   categorySlug: string,
   excludeOfferId: string,
-) {
+): Promise<OfferWithCategory[]> {
   return prisma.offer.findMany({
     where: {
       isActive: true,

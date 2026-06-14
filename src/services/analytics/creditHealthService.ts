@@ -28,7 +28,7 @@ export interface CreditHealthReport {
   score: 'strong' | 'moderate' | 'needs_attention'   // indicative only
 }
 
-async function getSignals(prisma: PrismaClient, userId: string) {
+async function getSignals(prisma: PrismaClient, userId: string): Promise<{ totalBalance: number; monthlyIncome: number; thisMonthSpend: number; monthlySubscriptions: number }> {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 

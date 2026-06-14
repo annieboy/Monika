@@ -112,10 +112,10 @@ export async function runSavingsSimulation(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-const fmtMonth = (d: Date) =>
+const fmtMonth = (d: Date): string =>
   d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
 export function formatSimulationResult(result: SimulationResult): string {

@@ -5,7 +5,7 @@
  * On hit: update mutable fields only. On miss: create. Never overwrite
  * curated content (title, keyBenefits, keyTerms, etc.) on update.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import { upsertOffer, expireStaleOffers, type OfferInput } from '../offerUpsertService.js'
 

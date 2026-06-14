@@ -30,7 +30,7 @@ export const PROMPT_NAME =
   `I can help you track spending, spot savings, and hit your money goals — all via WhatsApp.\n\n` +
   `To get started, what's your first name?`
 
-export const PROMPT_TERMS = (name: string) =>
+export const PROMPT_TERMS = (name: string): string =>
   `Nice to meet you, ${name}! 🎉\n\n` +
   `Before we dive in, I need you to agree to our Terms of Service and Privacy Policy:\n\n` +
   `📄 Terms: ${TERMS_URL}\n` +
@@ -42,7 +42,7 @@ export const PROMPT_MARKETING =
   `Would you like to receive personalised money-saving tips and offers via WhatsApp?\n\n` +
   `Reply *YES* or *NO* — you can change this anytime.`
 
-export const PROMPT_COMPLETE = (name: string) =>
+export const PROMPT_COMPLETE = (name: string): string =>
   `Welcome aboard, ${name}! 🚀\n\n` +
   `You can ask me things like:\n` +
   `• *"How much did I spend on groceries this month?"*\n` +

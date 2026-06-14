@@ -74,14 +74,13 @@ export async function getSpendingForecast(
   }
 }
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
 export function formatSpendingForecast(forecast: SpendingForecast): string {
   const daysLeft = forecast.daysInMonth - forecast.daysElapsed
   const pctElapsed = Math.round((forecast.daysElapsed / forecast.daysInMonth) * 100)
   const trend = forecast.changeVsLastMonth >= 0 ? 'up' : 'down'
-  const trendAmt = Math.abs(Math.round(forecast.changeVsLastMonth))
   const trendPct = forecast.lastMonthTotal > 0
     ? Math.abs(Math.round((forecast.changeVsLastMonth / forecast.lastMonthTotal) * 100))
     : null

@@ -86,7 +86,7 @@ export async function checkForFraud(
   prisma: PrismaClient,
   userId: string,
   offerId: string,
-  ip: string,
+  _ip: string,
 ): Promise<FraudCheckResult> {
   const flags: string[] = []
   const oneHourAgo = new Date(Date.now() - 3_600_000)
@@ -105,7 +105,7 @@ export async function recordRedirect(
   prisma: PrismaClient,
   shortCode: string,
   ip: string,
-  userAgent: string,
+  _userAgent: string,
 ): Promise<{ redirectUrl: string; opportunityId: string | null } | null> {
   const click = await prisma.affiliateClick.findUnique({
     where: { shortCode },

@@ -20,7 +20,7 @@ export interface BudgetAlertResult {
   errors: number
 }
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 async function getPhone(prisma: PrismaClient, userId: string): Promise<string | null> {

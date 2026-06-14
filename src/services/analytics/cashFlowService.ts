@@ -99,7 +99,7 @@ export async function getCashFlowForecast(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${Math.abs(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export function formatCashFlowForecast(forecast: CashFlowForecast): string {

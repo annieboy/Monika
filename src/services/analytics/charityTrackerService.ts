@@ -138,10 +138,10 @@ export async function getCharitySummary(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-const fmtDate = (d: Date) =>
+const fmtDate = (d: Date): string =>
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 export function formatCharitySummary(summary: CharitySummary): string {

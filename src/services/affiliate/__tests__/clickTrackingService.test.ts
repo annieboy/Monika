@@ -5,7 +5,7 @@
  * click-record creation, redirect recording, fraud detection, and postback
  * commission updates. Revenue accuracy depends on this code — do not weaken.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 
 vi.mock('../../../config.js', () => ({
@@ -284,7 +284,6 @@ describe('recordPostback', () => {
 
   it('updates click with APPROVED status and commission amount', async () => {
     const click = { id: 'click-1', opportunityId: null }
-    ;(makePrisma().affiliateClick.findUnique as ReturnType<typeof vi.fn>)
     const prisma = makePrisma()
     ;(prisma.affiliateClick.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(click)
 

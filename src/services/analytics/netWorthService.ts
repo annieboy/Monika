@@ -66,7 +66,7 @@ export async function calculateNetWorth(
   }
 }
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${Math.abs(n).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
 export function formatNetWorth(breakdown: NetWorthBreakdown): string {

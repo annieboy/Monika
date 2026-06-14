@@ -108,7 +108,7 @@ export async function getSpendingTrends(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
 export function formatSpendingTrends(result: SpendingTrendResult): string {

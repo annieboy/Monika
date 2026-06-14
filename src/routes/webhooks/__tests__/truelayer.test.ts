@@ -51,7 +51,7 @@ describe('POST /webhooks/truelayer', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     ;(config as any).TRUELAYER_WEBHOOK_SECRET = ''
     prisma = makePrisma()
     app = await buildTestApp(prisma)
@@ -155,7 +155,7 @@ describe('POST /webhooks/truelayer', () => {
   })
 
   it('returns 401 when signature invalid and secret is configured', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     ;(config as any).TRUELAYER_WEBHOOK_SECRET = 'my-webhook-secret'
 
     const body = JSON.stringify({
@@ -178,7 +178,7 @@ describe('POST /webhooks/truelayer', () => {
 
   it('accepts valid HMAC signature when secret is configured', async () => {
     const secret = 'my-webhook-secret'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     ;(config as any).TRUELAYER_WEBHOOK_SECRET = secret
 
     const payload = {

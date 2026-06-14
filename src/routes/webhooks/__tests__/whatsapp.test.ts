@@ -461,6 +461,101 @@ describe('POST /webhooks/whatsapp — delivery status updates', () => {
   })
 })
 
+// ── POST /webhooks/whatsapp — replay attack protection ───────────────────
+
+describe('POST /webhooks/whatsapp — replay attack protection', () => {
+  it('accepts a request with a current X-Hub-Timestamp', async () => {
+    const prisma = makeMockPrisma()
+    const app = await buildTestApp(prisma)
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+    const nowSeconds = Math.floor(Date.now() / 1000)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': sig,
+        'x-hub-timestamp': String(nowSeconds),
+      },
+      body,
+    })
+
+    expect(res.statusCode).toBe(200)
+    await app.close()
+  })
+
+  it('rejects a request with an X-Hub-Timestamp older than 5 minutes', async () => {
+    const prisma = makeMockPrisma()
+    const app = await buildTestApp(prisma)
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+    const staleSeconds = Math.floor(Date.now() / 1000) - 6 * 60 // 6 minutes ago
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': sig,
+        'x-hub-timestamp': String(staleSeconds),
+      },
+      body,
+    })
+
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('rejects a request with a future X-Hub-Timestamp (>30 s ahead)', async () => {
+    const prisma = makeMockPrisma()
+    const app = await buildTestApp(prisma)
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+    const futureSeconds = Math.floor(Date.now() / 1000) + 120 // 2 minutes in future
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': sig,
+        'x-hub-timestamp': String(futureSeconds),
+      },
+      body,
+    })
+
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('accepts a request without X-Hub-Timestamp (header is optional)', async () => {
+    const prisma = makeMockPrisma()
+    const app = await buildTestApp(prisma)
+
+    const body = makePayload()
+    const sig = sign(body, APP_SECRET)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': sig,
+        // No x-hub-timestamp header
+      },
+      body,
+    })
+
+    expect(res.statusCode).toBe(200)
+    await app.close()
+  })
+})
+
 // ── POST /webhooks/whatsapp — rate limit exceeded ─────────────────────────
 
 describe('POST /webhooks/whatsapp — rate limit exceeded', () => {

@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
-import { layout, esc, fmtDate, badge, paginate } from '../layout.js'
+import { layout, esc, fmtDate, paginate } from '../layout.js'
 
 const PAGE_SIZE = 50
 

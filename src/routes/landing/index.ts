@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 
-const WHATSAPP_NUMBER = '+15556572407'
 const WHATSAPP_LINK = `https://wa.me/15556572407?text=Hi%20Monika!`
 
 const landingRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {

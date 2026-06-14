@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { PrismaClient, Account } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { syncAccounts, syncTransactions, runFullSync } from '../sync.js'

@@ -47,7 +47,7 @@ import { processInboundMessage } from '../webhook.js'
 
 const NOW = new Date()
 const NEW_USER = { id: 'user-1', createdAt: NOW, updatedAt: NOW }
-const RETURNING_USER = { id: 'user-2', createdAt: new Date(NOW.getTime() - 1000), updatedAt: NOW }
+const _RETURNING_USER = { id: 'user-2', createdAt: new Date(NOW.getTime() - 1000), updatedAt: NOW }
 
 function makePrisma(opts: {
   hasPrefs?: boolean

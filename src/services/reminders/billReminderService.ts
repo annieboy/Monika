@@ -39,7 +39,7 @@ function isDueWithinDays(dayOfMonth: number, windowDays: number): boolean {
 }
 
 function buildMessage(bills: DueBill[]): string {
-  const fmtAmt = (n: number) => `£${n.toFixed(2)}`
+  const fmtAmt = (n: number): string => `£${n.toFixed(2)}`
   const total = bills.reduce((s, b) => s + b.amount, 0)
   let msg = `Heads up! You have ${bills.length === 1 ? 'a payment' : 'payments'} due in the next ${REMINDER_WINDOW_DAYS} days:\n\n`
   for (const b of bills) msg += `• ${b.merchantName}: ${fmtAmt(b.amount)}\n`
