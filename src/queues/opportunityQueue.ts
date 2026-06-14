@@ -20,6 +20,7 @@ export type OpportunityJobName =
   | 'expiry-nudge'
   | 'prune-sessions'
   | 'spending-trend-alerts'
+  | 'reconnect-nudge'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -156,6 +157,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
       name: 'prune-sessions',
       data: {},
       opts: { priority: 4 },
+    },
+  )
+
+  // Every 6 hours — nudge users whose bank connection has been failing for 3+ days
+  await queue.upsertJobScheduler(
+    'reconnect-nudge',
+    { pattern: '0 */6 * * *', tz: 'UTC' },
+    {
+      name: 'reconnect-nudge',
+      data: {},
+      opts: { priority: 2 },
     },
   )
 

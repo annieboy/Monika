@@ -9,6 +9,7 @@ export type ConsentEvent =
   | 'bank_connect_token_already_used'
   | 'bank_connect_token_not_found'
   | 'bank_disconnected'
+  | 'bank_reconnect_nudge_sent'
   | 'user_deleted'
 
 /**

@@ -21,6 +21,7 @@ import { runWeeklyDigestBatch } from '../services/notifications/weeklyDigestServ
 import { runExpiryNudgeBatch } from '../services/notifications/expiryNudgeService.js'
 import { pruneOldSessions } from '../services/conversation/sessionService.js'
 import { runSpendingTrendAlertBatch } from '../services/analytics/spendingTrendService.js'
+import { runReconnectNudgeBatch } from '../services/banking/reconnectNudgeService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -136,6 +137,11 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
         case 'spending-trend-alerts': {
           const result = await runSpendingTrendAlertBatch(prisma)
           return { processed: result.notified, errors: result.errors }
+        }
+
+        case 'reconnect-nudge': {
+          const result = await runReconnectNudgeBatch(prisma)
+          return { processed: result.nudged, errors: result.errors }
         }
 
         default: {
