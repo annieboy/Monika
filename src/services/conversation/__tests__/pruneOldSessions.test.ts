@@ -30,8 +30,8 @@ describe('pruneOldSessions', () => {
     await pruneOldSessions(prisma)
     const after = Date.now()
 
-    const call = (prisma.conversation.deleteMany as ReturnType<typeof vi.fn>).mock.calls[0]
-    const cutoff: Date = call[0].where.createdAt.lt
+    const call = (prisma.conversation.deleteMany as ReturnType<typeof vi.fn>).mock.calls[0]!
+    const cutoff: Date = (call[0] as { where: { createdAt: { lt: Date } } }).where.createdAt.lt
     const expectedMs = SESSION_PRUNE_AGE_DAYS * 86_400_000
     expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(expectedMs - 1000)
     expect(after - cutoff.getTime()).toBeLessThanOrEqual(expectedMs + 1000)

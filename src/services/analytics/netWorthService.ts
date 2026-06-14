@@ -25,31 +25,24 @@ export async function calculateNetWorth(
   userId: string,
 ): Promise<NetWorthBreakdown> {
   // Assets: current balances from all active bank connections
-  const connections = await prisma.bankConnection.findMany({
-    where: { userId, consentStatus: 'active' },
-    include: {
-      accounts: {
-        where: { deletedAt: null },
-        select: { displayName: true, balance: true, accountType: true },
-      },
-    },
+  const acctRows = await prisma.account.findMany({
+    where: { userId, isActive: true },
+    select: { displayName: true, currentBalance: true, accountType: true },
   })
 
   const accounts: Array<{ name: string; balance: number }> = []
   let totalAssets = 0
 
-  for (const conn of connections) {
-    for (const acct of conn.accounts) {
-      const bal = Number(acct.balance ?? 0)
-      accounts.push({ name: acct.displayName ?? acct.accountType ?? 'Account', balance: bal })
-      if (bal > 0) totalAssets += bal
-    }
+  for (const acct of acctRows) {
+    const bal = Number(acct.currentBalance ?? 0)
+    accounts.push({ name: acct.displayName ?? String(acct.accountType) ?? 'Account', balance: bal })
+    if (bal > 0) totalAssets += bal
   }
 
   // Liabilities: recurring payments that look like debt servicing
   const recurringPayments = await prisma.recurringPayment.findMany({
     where: { userId, isActive: true },
-    select: { merchantName: true, amount: true },
+    select: { merchantName: true, averageAmount: true },
   })
 
   const debtPayments: Array<{ name: string; monthlyPayment: number }> = []
@@ -57,7 +50,7 @@ export async function calculateNetWorth(
 
   for (const payment of recurringPayments) {
     if (DEBT_KEYWORDS.test(payment.merchantName ?? '')) {
-      const monthly = Math.abs(Number(payment.amount))
+      const monthly = Math.abs(Number(payment.averageAmount))
       debtPayments.push({ name: payment.merchantName ?? 'Debt payment', monthlyPayment: monthly })
       // Rough outstanding estimate: 12 months of remaining payments (conservative)
       estimatedLiabilities += monthly * 12

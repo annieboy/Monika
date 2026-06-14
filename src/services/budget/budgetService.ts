@@ -127,7 +127,7 @@ export async function handleBudget(
     let out = `📊 *Your monthly budgets:*\n\n`
     for (const { category, amount } of budgets) {
       const spend = await analytics.getSpendingByCategory(userId, startOfMonth, now, category)
-      const spent = spend.find(c => c.category?.toLowerCase().includes(category))?.amount ?? 0
+      const spent = spend.find(c => c.category?.toLowerCase().includes(category))?.total ?? 0
       const pct = amount > 0 ? Math.min(100, Math.round((spent / amount) * 100)) : 0
       const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
       const status = pct >= 100 ? '🔴' : pct >= 80 ? '🟡' : '🟢'
@@ -169,7 +169,7 @@ export async function handleBudget(
     const analytics = new TransactionAnalyticsService(prisma)
     const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     const spend = await analytics.getSpendingByCategory(userId, startOfMonth, new Date(), queryCategory)
-    const spent = spend.find(c => c.category?.toLowerCase().includes(queryCategory))?.amount ?? 0
+    const spent = spend.find(c => c.category?.toLowerCase().includes(queryCategory))?.total ?? 0
     const pct = Math.min(100, Math.round((spent / amount) * 100))
     const remaining = Math.max(0, amount - spent)
 

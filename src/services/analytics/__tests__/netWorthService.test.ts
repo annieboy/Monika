@@ -8,23 +8,18 @@ function makePrisma(opts: {
 } = {}) {
   const accounts = (opts.accounts ?? []).map(a => ({
     displayName: a.displayName,
-    balance: a.balance,
+    currentBalance: a.balance,
     accountType: a.accountType ?? 'current',
   }))
 
   const recurringPayments = (opts.recurringPayments ?? []).map(r => ({
     merchantName: r.merchantName,
-    amount: r.amount,
+    averageAmount: r.amount,
   }))
 
   return {
-    bankConnection: {
-      findMany: () =>
-        Promise.resolve([
-          {
-            accounts,
-          },
-        ]),
+    account: {
+      findMany: () => Promise.resolve(accounts),
     },
     recurringPayment: {
       findMany: () => Promise.resolve(recurringPayments),
