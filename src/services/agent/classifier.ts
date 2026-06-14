@@ -211,6 +211,39 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'fx_transactions',
+    patterns: [
+      /foreign\s+(currency|transaction|charge)/i,
+      /fx\s+(fee|charge|transaction)/i,
+      /travel\s+(spending|transactions?|expenses?)/i,
+      /currency\s+(fee|charge|conversion)/i,
+      /how\s+much\s+(did\s+i\s+spend|have\s+i\s+spent)\s+(abroad|overseas|on\s+holiday)/i,
+      /international\s+(transaction|charge|fee)/i,
+      /non[\s-]sterling/i,
+    ],
+  },
+  {
+    intent: 'charity_tracker',
+    patterns: [
+      /charit(y|ies|able)/i,
+      /donation|donate/i,
+      /gift\s+aid/i,
+      /how\s+much\s+(have\s+i\s+donated|did\s+i\s+give)/i,
+      /justgiving|gofundme/i,
+      /charitable\s+giving/i,
+    ],
+  },
+  {
+    intent: 'category_deep_dive',
+    patterns: [
+      /breakdown\s+(of|for)\s+(my\s+)?(groceries|transport|eating\s+out|food|entertainment|shopping|fuel|travel|bills)/i,
+      /detail(ed)?\s+(spending|breakdown)\s+(on|for)/i,
+      /more\s+detail(s)?\s+(on|about)\s+my\s+\w+\s+spending/i,
+      /drill\s+down\s+(into|on)/i,
+      /deep\s+dive/i,
+    ],
+  },
+  {
     intent: 'savings_simulation',
     patterns: [
       /if\s+i\s+(save|cut|reduce|put\s+aside)/i,

@@ -29,6 +29,9 @@ import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearSer
 import { detectDuplicateTransactions, formatDuplicateTransactions } from '../analytics/duplicateTransactionService.js'
 import { getMerchantInsight, formatMerchantInsight } from '../analytics/merchantInsightService.js'
 import { parseSimulation, runSavingsSimulation, formatSimulationResult } from '../savings/savingsSimulationService.js'
+import { getFxTransactions, formatFxSummary } from '../analytics/fxTransactionService.js'
+import { getCharitySummary, formatCharitySummary } from '../analytics/charityTrackerService.js'
+import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/categoryDeepDiveService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -249,6 +252,33 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'fx_transactions': {
+      const fxSummary = await getFxTransactions(prisma, userId)
+      structuredText = formatFxSummary(fxSummary)
+      break
+    }
+
+    case 'charity_tracker': {
+      const charitySummary = await getCharitySummary(prisma, userId)
+      structuredText = formatCharitySummary(charitySummary)
+      break
+    }
+
+    case 'category_deep_dive': {
+      // Extract category from message
+      const catMatch = message.match(
+        /(?:breakdown\s+(?:of|for)|detailed?\s+(?:spending|breakdown)\s+(?:on|for)|more\s+details?\s+(?:on|about)\s+my|drill\s+down\s+(?:into|on)|deep\s+dive\s+(?:into|on))\s+(?:my\s+)?([\w\s]+?)(?:\s+spending|\s*\?|$)/i,
+      )
+      const cat = catMatch?.[1]?.trim() ?? categoryFilter
+      if (!cat) {
+        structuredText = `Which category would you like a breakdown for? E.g. *"breakdown of my groceries"* or *"detail on eating out"*.`
+      } else {
+        const deepDive = await getCategoryDeepDive(prisma, userId, cat)
+        structuredText = formatCategoryDeepDive(deepDive)
+      }
       break
     }
 

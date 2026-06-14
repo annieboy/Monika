@@ -23,6 +23,9 @@ export const INTENTS = [
   'tax_year_summary',
   'duplicate_detection',
   'savings_simulation',
+  'fx_transactions',
+  'charity_tracker',
+  'category_deep_dive',
   'unknown',
 ] as const
 
