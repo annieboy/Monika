@@ -91,7 +91,7 @@ describe('formatFxSummary', () => {
 
   it('shows total, fee estimate, and currency breakdown', () => {
     const out = formatFxSummary({
-      transactions: [{ id: 'a', date: new Date('2026-03-10'), merchant: 'Hotel', gbpAmount: 200, foreignCurrency: 'EUR', foreignAmount: 240, description: null }],
+      transactions: [{ id: 'a', date: new Date('2026-03-10'), merchant: 'Hotel', gbpAmount: 200, foreignCurrency: 'EUR', description: null }],
       totalGbpSpend: 200,
       estimatedFxFees: 5.98,
       currencyBreakdown: [{ currency: 'EUR', totalGbp: 200, count: 1 }],
