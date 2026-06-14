@@ -211,6 +211,17 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'duplicate_detection',
+    patterns: [
+      /duplicate\s+(charge|transaction|payment)/i,
+      /charged\s+twice/i,
+      /double[\s-]charged/i,
+      /same\s+(charge|transaction|payment)\s+twice/i,
+      /been\s+charged\s+twice/i,
+      /duplicate\s+transactions?/i,
+    ],
+  },
+  {
     intent: 'tax_year_summary',
     patterns: [
       /tax\s+year/i,

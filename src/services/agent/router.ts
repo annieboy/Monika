@@ -26,6 +26,7 @@ import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytic
 import { parseTransactionSearch, searchTransactions, formatTransactionSearch } from '../analytics/transactionSearchService.js'
 import { getCashFlowForecast, formatCashFlowForecast } from '../analytics/cashFlowService.js'
 import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearService.js'
+import { detectDuplicateTransactions, formatDuplicateTransactions } from '../analytics/duplicateTransactionService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -240,6 +241,12 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'duplicate_detection': {
+      const dupes = await detectDuplicateTransactions(prisma, userId)
+      structuredText = formatDuplicateTransactions(dupes)
       break
     }
 

@@ -21,6 +21,7 @@ export const INTENTS = [
   'transaction_search',
   'cash_flow',
   'tax_year_summary',
+  'duplicate_detection',
   'unknown',
 ] as const
 
