@@ -106,21 +106,27 @@ curl http://localhost:3000/ready
 curl "http://localhost:3000/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=&hub.challenge=ping"
 # → 403 (expected — WHATSAPP_VERIFY_TOKEN not set)
 
-# WhatsApp inbound message (stub — not yet processing)
+# WhatsApp inbound message — HMAC signature is mandatory; an unsigned
+# request is rejected (this is a security control, not a stub):
 curl -X POST http://localhost:3000/webhooks/whatsapp \
   -H "Content-Type: application/json" \
   -d '{"entry":[]}'
-# → HTTP 200
+# → 403 (expected — missing X-Hub-Signature-256)
 
-# Open Banking connect (stub)
-curl http://localhost:3000/banking/connect
-# → {"stub":true, ...}
-
-# AI agent chat (stub)
+# AI agent chat — fully wired (classify → route → analytics → validate):
 curl -X POST http://localhost:3000/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"How much did I spend on groceries?"}'
-# → {"stub":true, "echo":"How much did I spend on groceries?", ...}
+  -d '{"message":"How much did I spend on groceries?","userId":"<uuid>"}'
+# → a data-driven natural-language reply (or a connect-bank prompt
+#   if the user has no linked account)
+```
+
+For the **full automated end-to-end smoke test** (simulates onboarding →
+connect mock bank → ask spending/subscription/balance questions → check the
+admin dashboard), start the server and run:
+
+```bash
+npm run e2e
 ```
 
 Expected `/health` response:
@@ -248,11 +254,10 @@ import order.
 
 ---
 
-## Next Steps
+## Status
 
-See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full
-task breakdown. Upcoming tasks:
-
-1. **Task 5.1** — WhatsApp webhook: HMAC signature verification, message parsing
-2. **Task 6.1** — TrueLayer client: OAuth flow, token exchange
-3. **Task 7.1** — AI agent: Anthropic SDK, tool-calling loop
+**Phase 1 is complete and ready for UAT.** The WhatsApp webhook (HMAC + replay
+protection), TrueLayer OAuth flow, and the AI agent (classify → route →
+analytics → response validation) are all implemented and covered by the test
+suite (1200+ tests). See [`UAT.md`](UAT.md) for the User Acceptance Testing
+runbook and manual test scenarios.
