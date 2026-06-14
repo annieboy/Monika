@@ -28,6 +28,7 @@ import { getCashFlowForecast, formatCashFlowForecast } from '../analytics/cashFl
 import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearService.js'
 import { detectDuplicateTransactions, formatDuplicateTransactions } from '../analytics/duplicateTransactionService.js'
 import { getMerchantInsight, formatMerchantInsight } from '../analytics/merchantInsightService.js'
+import { parseSimulation, runSavingsSimulation, formatSimulationResult } from '../savings/savingsSimulationService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -248,6 +249,17 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'savings_simulation': {
+      const simInput = parseSimulation(message)
+      if (!simInput) {
+        structuredText = `Try: *"If I save £200/month, how long to reach my holiday goal?"* or *"If I cut eating out by £50, when do I hit £2,000?"*`
+      } else {
+        const simResult = await runSavingsSimulation(prisma, userId, simInput)
+        structuredText = formatSimulationResult(simResult)
+      }
       break
     }
 

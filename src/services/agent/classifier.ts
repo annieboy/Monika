@@ -211,6 +211,17 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'savings_simulation',
+    patterns: [
+      /if\s+i\s+(save|cut|reduce|put\s+aside)/i,
+      /how\s+long\s+(to|would\s+it\s+take)\s+(to\s+)?save/i,
+      /how\s+many\s+months\s+(to|until)\s+(i\s+)?save/i,
+      /when\s+would\s+i\s+(reach|hit|have)\s+£/i,
+      /saving\s+£[\d,]+\s*(?:\/|per|a)\s+month/i,
+      /cut\s+[\w\s]+\s+by\s+£/i,
+    ],
+  },
+  {
     intent: 'duplicate_detection',
     patterns: [
       /duplicate\s+(charge|transaction|payment)/i,

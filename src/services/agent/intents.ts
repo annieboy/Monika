@@ -22,6 +22,7 @@ export const INTENTS = [
   'cash_flow',
   'tax_year_summary',
   'duplicate_detection',
+  'savings_simulation',
   'unknown',
 ] as const
 
