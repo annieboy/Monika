@@ -6,6 +6,7 @@ import {
   checkDeliveryEligibility,
   recordOptIn,
   recordOptOut,
+  isInQuietHours,
 } from '../consentService.js'
 
 // ── isOptOutMessage ───────────────────────────────────────────────────────────
@@ -265,5 +266,36 @@ describe('recordOptOut', () => {
     expect(cooling).toBeLessThan(expectedMax)
 
     expect(call.update.consentWithdrawnAt).toBeInstanceOf(Date)
+  })
+})
+
+// ── isInQuietHours (UK timezone) ──────────────────────────────────────────────
+
+describe('isInQuietHours', () => {
+  it('returns true during quiet hours window (21:00–08:00)', () => {
+    // 22:00 UK time in winter (UTC = UTC+0, so 22:00 UTC)
+    const nighttime = new Date('2026-01-10T22:00:00Z')
+    expect(isInQuietHours('21:00', '08:00', nighttime)).toBe(true)
+  })
+
+  it('returns true at midnight UK time', () => {
+    const midnight = new Date('2026-01-10T00:30:00Z')
+    expect(isInQuietHours('21:00', '08:00', midnight)).toBe(true)
+  })
+
+  it('returns false during daytime (12:00 UK)', () => {
+    const noon = new Date('2026-01-10T12:00:00Z')
+    expect(isInQuietHours('21:00', '08:00', noon)).toBe(false)
+  })
+
+  it('accounts for BST offset (UTC+1) in summer', () => {
+    // 20:30 UTC in BST = 21:30 UK → inside quiet hours
+    const bstEvening = new Date('2026-07-01T20:30:00Z')
+    expect(isInQuietHours('21:00', '08:00', bstEvening)).toBe(true)
+  })
+
+  it('returns false at 08:30 UK time (just after quiet hours end)', () => {
+    const morning = new Date('2026-01-10T08:30:00Z')
+    expect(isInQuietHours('21:00', '08:00', morning)).toBe(false)
   })
 })

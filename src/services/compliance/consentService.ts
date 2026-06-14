@@ -37,13 +37,20 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 86_400_000)
 }
 
-function isInQuietHours(start: string, end: string, now = new Date()): boolean {
-  // start/end are "HH:MM" in UK time (approximate with UTC for now)
+export function isInQuietHours(start: string, end: string, now = new Date()): boolean {
+  // Convert current time to UK local time (handles GMT/BST automatically)
+  const ukTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now)
+
   const toMinutes = (hhmm: string) => {
     const parts = hhmm.split(':').map(Number)
     return (parts[0] ?? 0) * 60 + (parts[1] ?? 0)
   }
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes()
+  const nowMinutes = toMinutes(ukTime)
   const startMin = toMinutes(start)
   const endMin = toMinutes(end)
 

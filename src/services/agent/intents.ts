@@ -14,6 +14,7 @@ export const INTENTS = [
   'budget',
   'net_worth',
   'spending_trends',
+  'spending_forecast',
   'account_management',
   'onboarding_help',
   'unknown',

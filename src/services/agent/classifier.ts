@@ -168,6 +168,17 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'spending_forecast',
+    patterns: [
+      /how\s+much\s+will\s+i\s+spend\s+(this|by\s+end\s+of)\s+month/i,
+      /spending\s+forecast/i,
+      /projected?\s+spend/i,
+      /on\s+track\s+(for|to\s+spend)/i,
+      /end\s+of\s+month\s+spend/i,
+      /how\s+much\s+am\s+i\s+on\s+track\s+to\s+spend/i,
+    ],
+  },
+  {
     intent: 'spending_trends',
     patterns: [
       /how\s+is\s+my\s+spending\s+trending/i,
