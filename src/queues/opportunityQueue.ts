@@ -15,6 +15,9 @@ export type OpportunityJobName =
   | 'bill-reminders'
   | 'expire-offers'
   | 'reconcile-commissions'
+  | 'goal-progress-check'
+  | 'weekly-digest'
+  | 'expiry-nudge'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -105,6 +108,39 @@ export async function scheduleRecurringJobs(): Promise<void> {
     { pattern: '0 3 * * *', tz: 'UTC' },
     {
       name: 'reconcile-commissions',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Daily at 11:00 UTC — check savings goal progress milestones
+  await queue.upsertJobScheduler(
+    'daily-goal-progress',
+    { pattern: '0 11 * * *', tz: 'UTC' },
+    {
+      name: 'goal-progress-check',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Weekly on Sunday at 09:30 UTC — send spending digest to active users
+  await queue.upsertJobScheduler(
+    'weekly-digest',
+    { pattern: '30 9 * * 0', tz: 'UTC' },
+    {
+      name: 'weekly-digest',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Every 6 hours — nudge users about opportunities expiring within 48h
+  await queue.upsertJobScheduler(
+    'expiry-nudge',
+    { pattern: '0 */6 * * *', tz: 'UTC' },
+    {
+      name: 'expiry-nudge',
       data: {},
       opts: { priority: 3 },
     },
