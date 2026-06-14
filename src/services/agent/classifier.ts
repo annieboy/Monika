@@ -156,6 +156,29 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'budget',
+    patterns: [
+      /set\s+(?:a\s+|my\s+)?(?:£[\d,]+\s+)?budget\s+(?:for|to)/i,
+      /budget\s+(?:£[\d,]+\s+for|for\s+my)/i,
+      /£[\d,]+\s+(?:budget|limit)\s+for/i,
+      /my\s+budgets?/i,
+      /show\s+(?:me\s+)?(?:my\s+)?budgets?/i,
+      /what(?:'s|\s+is)\s+my\s+\w+\s+budget/i,
+      /spending\s+limit/i,
+    ],
+  },
+  {
+    intent: 'net_worth',
+    patterns: [
+      /net\s+worth/i,
+      /what\s+am\s+i\s+worth/i,
+      /how\s+much\s+am\s+i\s+worth/i,
+      /total\s+(assets?|wealth)/i,
+      /assets?\s+(vs?|versus|minus)\s+liabilit/i,
+      /overall\s+financial\s+position/i,
+    ],
+  },
+  {
     intent: 'account_management',
     patterns: [
       /stop\s+(sending|messages|offers|notifications|tips)/i,
