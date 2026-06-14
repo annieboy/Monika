@@ -78,3 +78,22 @@ export async function loadSessionHistory(
     content: r.content,
   }))
 }
+
+// Sessions older than this are pruned nightly
+export const SESSION_PRUNE_AGE_DAYS = 90
+
+export interface PruneResult {
+  deleted: number
+}
+
+/**
+ * Deletes conversation rows older than SESSION_PRUNE_AGE_DAYS.
+ * Safe to run repeatedly — only removes old data, never touches recent sessions.
+ */
+export async function pruneOldSessions(prisma: PrismaClient): Promise<PruneResult> {
+  const cutoff = new Date(Date.now() - SESSION_PRUNE_AGE_DAYS * 86_400_000)
+  const result = await prisma.conversation.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  })
+  return { deleted: result.count }
+}

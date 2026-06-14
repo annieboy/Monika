@@ -18,6 +18,7 @@ export type OpportunityJobName =
   | 'goal-progress-check'
   | 'weekly-digest'
   | 'expiry-nudge'
+  | 'prune-sessions'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -143,6 +144,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
       name: 'expiry-nudge',
       data: {},
       opts: { priority: 3 },
+    },
+  )
+
+  // Nightly at 01:00 UTC — delete conversation rows older than 90 days
+  await queue.upsertJobScheduler(
+    'nightly-prune-sessions',
+    { pattern: '0 1 * * *', tz: 'UTC' },
+    {
+      name: 'prune-sessions',
+      data: {},
+      opts: { priority: 4 },
     },
   )
 }
