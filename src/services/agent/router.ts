@@ -25,6 +25,7 @@ import { getSpendingForecast, formatSpendingForecast } from '../analytics/spendi
 import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytics/financialHealthService.js'
 import { parseTransactionSearch, searchTransactions, formatTransactionSearch } from '../analytics/transactionSearchService.js'
 import { getCashFlowForecast, formatCashFlowForecast } from '../analytics/cashFlowService.js'
+import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -239,6 +240,12 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'tax_year_summary': {
+      const taxSummary = await getTaxYearSummary(prisma, userId)
+      structuredText = formatTaxYearSummary(taxSummary)
       break
     }
 

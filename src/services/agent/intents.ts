@@ -20,6 +20,7 @@ export const INTENTS = [
   'onboarding_help',
   'transaction_search',
   'cash_flow',
+  'tax_year_summary',
   'unknown',
 ] as const
 

@@ -211,6 +211,18 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'tax_year_summary',
+    patterns: [
+      /tax\s+year/i,
+      /self[\s-]assess/i,
+      /hmrc/i,
+      /tax\s+return/i,
+      /annual\s+(income|spending|summary)/i,
+      /business\s+expenses?/i,
+      /how\s+much\s+(did\s+i\s+earn|have\s+i\s+earned)\s+(this|last)\s+year/i,
+    ],
+  },
+  {
     intent: 'cash_flow',
     patterns: [
       /cash\s+flow/i,
