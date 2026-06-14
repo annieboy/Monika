@@ -13,6 +13,7 @@ import { transactionsListPage, transactionDetailPage } from './pages/transaction
 import { auditLogPage } from './pages/audit.js'
 import { analyticsPage } from './pages/analytics.js'
 import { registerAdminOfferRoutes } from './offers.js'
+import { registerAdminApiRoutes } from './api.js'
 import { opportunityAnalyticsPage } from './pages/opportunityAnalytics.js'
 import { conversationsPage } from './pages/conversations.js'
 import { categoriesPage } from './pages/categories.js'
@@ -95,6 +96,9 @@ const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   // ── Offer management ───────────────────────────────────────────────────────
   await registerAdminOfferRoutes(app)
+
+  // ── JSON REST API ──────────────────────────────────────────────────────────
+  await registerAdminApiRoutes(app)
 
   // ── Opportunity analytics ──────────────────────────────────────────────────
   app.get('/opportunities', async (_req, reply) => {
