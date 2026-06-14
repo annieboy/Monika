@@ -20,6 +20,9 @@ const VALID_JOB_NAMES: ReadonlySet<string> = new Set<OpportunityJobName>([
   'bill-reminders',
   'expire-offers',
   'reconcile-commissions',
+  'goal-progress-check',
+  'weekly-digest',
+  'expiry-nudge',
 ])
 
 export async function registerAdminApiRoutes(app: FastifyInstance): Promise<void> {

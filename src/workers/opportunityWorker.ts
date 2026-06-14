@@ -16,6 +16,9 @@ import { deliverOpportunitiesToUser, runDeliveryBatch } from '../services/opport
 import { expireStaleOffers } from '../services/offers/offerUpsertService.js'
 import { reconcileCommissions } from '../services/affiliate/reconciliationService.js'
 import { runBillReminderBatch } from '../services/reminders/billReminderService.js'
+import { runGoalProgressBatch } from '../services/notifications/goalProgressService.js'
+import { runWeeklyDigestBatch } from '../services/notifications/weeklyDigestService.js'
+import { runExpiryNudgeBatch } from '../services/notifications/expiryNudgeService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -106,6 +109,21 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
         case 'reconcile-commissions': {
           const result = await reconcileCommissions(prisma)
           return { processed: result.checked, errors: result.errors }
+        }
+
+        case 'goal-progress-check': {
+          const result = await runGoalProgressBatch(prisma)
+          return { processed: result.notified, errors: result.errors }
+        }
+
+        case 'weekly-digest': {
+          const result = await runWeeklyDigestBatch(prisma)
+          return { processed: result.sent, errors: result.errors }
+        }
+
+        case 'expiry-nudge': {
+          const result = await runExpiryNudgeBatch(prisma)
+          return { processed: result.nudged, errors: result.errors }
         }
 
         default: {
