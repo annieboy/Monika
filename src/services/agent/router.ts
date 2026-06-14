@@ -27,6 +27,7 @@ import { parseTransactionSearch, searchTransactions, formatTransactionSearch } f
 import { getCashFlowForecast, formatCashFlowForecast } from '../analytics/cashFlowService.js'
 import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearService.js'
 import { detectDuplicateTransactions, formatDuplicateTransactions } from '../analytics/duplicateTransactionService.js'
+import { getMerchantInsight, formatMerchantInsight } from '../analytics/merchantInsightService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -181,6 +182,12 @@ export async function routeIntent(
       const merchant = merchantFilter ?? message.match(/(?:at|on|from)\s+([A-Za-z0-9 &]+?)(?:\?|$|\s+in|\s+last|\s+this)/i)?.[1]?.trim()
       if (!merchant) {
         structuredText = "Which merchant would you like to check? For example: \"How much have I spent at Tesco this month?\""
+      } else if (!mFrom && !mTo && /insight|history|detail|tell me about|how often|visits?/i.test(message)) {
+        // Enriched merchant insight when no date filter and user wants historical context
+        const insight = await getMerchantInsight(prisma, userId, merchant)
+        structuredText = insight
+          ? formatMerchantInsight(insight)
+          : `No transactions found for *${merchant}*.`
       } else {
         const result = await analytics.getSpendingByMerchantName(userId, merchant, mFrom, mTo)
         structuredText = formatMerchantSpend(merchant, result, mFrom)
