@@ -33,6 +33,18 @@ vi.mock('../../services/affiliate/reconciliationService.js', () => ({
   reconcileCommissions: vi.fn().mockResolvedValue({ checked: 5, errors: 0 }),
 }))
 
+vi.mock('../../services/analytics/monthlyAggregationService.js', () => ({
+  runMonthlyAggregationBatch: vi.fn().mockResolvedValue({ aggregated: 7, errors: 0 }),
+}))
+
+vi.mock('../../services/analytics/anomalyScoreService.js', () => ({
+  runAnomalyScoreBatch: vi.fn().mockResolvedValue({ scored: 12, errors: 0 }),
+}))
+
+vi.mock('../../services/analytics/anomalyAlertService.js', () => ({
+  runAnomalyAlertBatch: vi.fn().mockResolvedValue({ alerted: 3, errors: 0 }),
+}))
+
 vi.mock('../../queues/connection.js', () => ({
   createRedisConnection: vi.fn().mockReturnValue({ on: vi.fn(), quit: vi.fn() }),
 }))
@@ -53,6 +65,9 @@ import { detectOpportunities } from '../../services/opportunity/opportunityDetec
 import { deliverOpportunitiesToUser, runDeliveryBatch } from '../../services/opportunity/opportunityDeliveryService.js'
 import { expireStaleOffers } from '../../services/offers/offerUpsertService.js'
 import { reconcileCommissions } from '../../services/affiliate/reconciliationService.js'
+import { runMonthlyAggregationBatch } from '../../services/analytics/monthlyAggregationService.js'
+import { runAnomalyScoreBatch } from '../../services/analytics/anomalyScoreService.js'
+import { runAnomalyAlertBatch } from '../../services/analytics/anomalyAlertService.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +202,45 @@ describe('job: reconcile-commissions', () => {
     const result = await handler(makeJob('reconcile-commissions')) as { processed: number; errors: number }
     expect(reconcileCommissions).toHaveBeenCalledWith(prisma)
     expect(result.processed).toBe(5)
+    expect(result.errors).toBe(0)
+  })
+})
+
+describe('job: monthly-aggregation', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls runMonthlyAggregationBatch and maps aggregated to processed', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('monthly-aggregation')) as { processed: number; errors: number }
+    expect(runMonthlyAggregationBatch).toHaveBeenCalledWith(prisma)
+    expect(result.processed).toBe(7)
+    expect(result.errors).toBe(0)
+  })
+})
+
+describe('job: anomaly-scoring', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls runAnomalyScoreBatch and maps scored to processed', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('anomaly-scoring')) as { processed: number; errors: number }
+    expect(runAnomalyScoreBatch).toHaveBeenCalledWith(prisma)
+    expect(result.processed).toBe(12)
+    expect(result.errors).toBe(0)
+  })
+})
+
+describe('job: anomaly-alerts', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('calls runAnomalyAlertBatch and maps alerted to processed', async () => {
+    const prisma = makePrisma()
+    const handler = captureHandler(prisma)
+    const result = await handler(makeJob('anomaly-alerts')) as { processed: number; errors: number }
+    expect(runAnomalyAlertBatch).toHaveBeenCalledWith(prisma)
+    expect(result.processed).toBe(3)
     expect(result.errors).toBe(0)
   })
 })
