@@ -17,6 +17,7 @@ import {
 } from '../analytics/formatter.js'
 import { answerWithAI } from './conversational.js'
 import { parseGoalFromMessage, createGoal, listGoals } from '../savings/savingsGoalService.js'
+import { handleAccountManagement } from '../account/accountManagementService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -75,6 +76,11 @@ export async function routeIntent(
 ): Promise<string> {
   // Payment requests — not yet supported
   if (intent === 'payment_request') return PAYMENT_REJECTION
+
+  // Account management — works without bank connection
+  if (intent === 'account_management') {
+    return handleAccountManagement(prisma, userId, message)
+  }
 
   // Savings goals — handled before bank check (listing works without bank)
   if (intent === 'savings_goal') {

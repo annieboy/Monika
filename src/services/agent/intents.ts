@@ -11,6 +11,7 @@ export const INTENTS = [
   'savings_goal',
   'upcoming_bills',
   'payment_request',
+  'account_management',
   'onboarding_help',
   'unknown',
 ] as const
