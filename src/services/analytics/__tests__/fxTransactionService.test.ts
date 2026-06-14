@@ -8,19 +8,18 @@ function makeRow(opts: {
   id: string
   amount: number
   date?: Date
-  foreignCurrency?: string | null
+  currency?: string | null   // passed as description token for detection
   cleanDescription?: string | null
   rawDescription?: string | null
 }) {
+  const desc = opts.cleanDescription ?? (opts.currency ? `Payment ${opts.currency} charge` : null)
   return {
     id: opts.id,
     transactionDate: opts.date ?? new Date('2026-03-10'),
     merchantNameClean: 'Merchant',
     merchantName: 'MERCHANT',
     amount: opts.amount,
-    foreignCurrency: opts.foreignCurrency ?? null,
-    foreignAmount: null,
-    cleanDescription: opts.cleanDescription ?? null,
+    cleanDescription: desc,
     rawDescription: opts.rawDescription ?? null,
   }
 }
@@ -52,8 +51,8 @@ describe('getFxTransactions', () => {
   it('computes total and estimated fee from fx rows', async () => {
     vi.setSystemTime(NOW)
     const rows = [
-      makeRow({ id: 'a', amount: -100, foreignCurrency: 'USD' }),
-      makeRow({ id: 'b', amount: -200, foreignCurrency: 'EUR' }),
+      makeRow({ id: 'a', amount: -100, currency: 'USD' }),
+      makeRow({ id: 'b', amount: -200, currency: 'EUR' }),
     ]
     const prisma = makePrisma(rows, [])
     const result = await getFxTransactions(prisma, 'u1')
@@ -64,9 +63,9 @@ describe('getFxTransactions', () => {
   it('groups currency breakdown correctly', async () => {
     vi.setSystemTime(NOW)
     const rows = [
-      makeRow({ id: 'a', amount: -50, foreignCurrency: 'USD' }),
-      makeRow({ id: 'b', amount: -80, foreignCurrency: 'USD' }),
-      makeRow({ id: 'c', amount: -120, foreignCurrency: 'EUR' }),
+      makeRow({ id: 'a', amount: -50, currency: 'USD' }),
+      makeRow({ id: 'b', amount: -80, currency: 'USD' }),
+      makeRow({ id: 'c', amount: -120, currency: 'EUR' }),
     ]
     const prisma = makePrisma(rows, [])
     const result = await getFxTransactions(prisma, 'u1')
