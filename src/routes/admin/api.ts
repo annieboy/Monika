@@ -210,4 +210,55 @@ export async function registerAdminApiRoutes(app: FastifyInstance): Promise<void
       return reply.status(202).send({ ok: true, jobId: added.id, name: job })
     },
   )
+
+  // ── GET /admin/api/metrics ────────────────────────────────────────────────
+  app.get('/api/metrics', async (_request, reply) => {
+    const prisma = reply.server.prisma
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const [
+      totalUsers,
+      activeConnections,
+      newUsersLast7Days,
+      newUsersLast30Days,
+      messagesLast7Days,
+      messagesLast30Days,
+      totalTransactions,
+      syncErrors,
+      activeGoals,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.bankConnection.count({ where: { consentStatus: 'active' } }),
+      prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.conversation.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.conversation.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.transaction.count(),
+      prisma.bankConnection.count({ where: { lastSyncStatus: 'error' } }),
+      prisma.savingsGoal.count({ where: { status: 'active' } }),
+    ])
+
+    return reply.send({
+      timestamp: now.toISOString(),
+      users: {
+        total: totalUsers,
+        activeConnections,
+        newLast7Days: newUsersLast7Days,
+        newLast30Days: newUsersLast30Days,
+      },
+      messages: {
+        last7Days: messagesLast7Days,
+        last30Days: messagesLast30Days,
+        thisMonthStart: monthStart.toISOString(),
+      },
+      data: {
+        totalTransactions,
+        syncErrors,
+        activeGoals,
+      },
+    })
+  })
 }

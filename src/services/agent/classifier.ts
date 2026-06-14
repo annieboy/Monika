@@ -46,6 +46,20 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'cash_flow',
+    patterns: [
+      /cash\s+flow/i,
+      /will\s+i\s+run\s+out\s+(of\s+)?money/i,
+      /can\s+i\s+make\s+it\s+to\s+payday/i,
+      /\bshortfall\b/i,
+      /projected\s+balance/i,
+      /before\s+(my\s+)?next\s+payday/i,
+      /how\s+long\s+will\s+my\s+money\s+last/i,
+      /run\s+out\s+of\s+money/i,
+      /money\s+until\s+payday/i,
+    ],
+  },
+  {
     intent: 'income_query',
     patterns: [
       /when\s+(does|is|will)\s+(my\s+)?(salary|pay|wage|income|paycheck)/i,
@@ -138,6 +152,123 @@ const RULES: Rule[] = [
       /how\s+much\s+.*left/i,
     ],
   },
+  // ── Specific data intents — must precede broad spending_analysis ──────────
+  {
+    intent: 'credit_health',
+    patterns: [
+      /credit\s+(score|rating|health|report)/i,
+      /how\s+(is|can\s+i\s+improve)\s+my\s+credit/i,
+      /improve\s+my\s+credit/i,
+      /credit\s+file/i,
+      /will\s+(?:this|i)\s+(affect|hurt|help)\s+my\s+credit/i,
+      /tips?\s+for\s+(better\s+)?credit/i,
+      /mortgage\s+(?:readiness|application|eligibility)/i,
+    ],
+  },
+  {
+    intent: 'fx_transactions',
+    patterns: [
+      /foreign\s+(currency|transaction|charge)/i,
+      /fx\s+(fee|charge|transaction)/i,
+      /travel\s+(spending|transactions?|expenses?)/i,
+      /currency\s+(fee|charge|conversion)/i,
+      /how\s+much\s+(did\s+i\s+spend|have\s+i\s+spent)\s+(abroad|overseas|on\s+holiday)/i,
+      /international\s+(transaction|charge|fee)/i,
+      /non[\s-]sterling/i,
+    ],
+  },
+  {
+    intent: 'charity_tracker',
+    patterns: [
+      /charit(y|ies|able)/i,
+      /donation|donate/i,
+      /gift\s+aid/i,
+      /how\s+much\s+(have\s+i\s+donated|did\s+i\s+give)/i,
+      /justgiving|gofundme/i,
+      /charitable\s+giving/i,
+    ],
+  },
+  {
+    intent: 'category_deep_dive',
+    patterns: [
+      /breakdown\s+(of|for)\s+(my\s+)?(groceries|transport|eating\s+out|food|entertainment|shopping|fuel|travel|bills)/i,
+      /detail(ed)?\s+(spending|breakdown)\s+(on|for)/i,
+      /more\s+detail(s)?\s+(on|about)\s+my\s+\w+\s+spending/i,
+      /drill\s+down\s+(into|on)/i,
+      /deep\s+dive/i,
+    ],
+  },
+  {
+    intent: 'savings_simulation',
+    patterns: [
+      /if\s+i\s+(save|cut|reduce|put\s+aside)/i,
+      /how\s+long\s+(to|would\s+it\s+take)\s+(to\s+)?save/i,
+      /how\s+many\s+months\s+(to|until)\s+(i\s+)?save/i,
+      /when\s+would\s+i\s+(reach|hit|have)\s+£/i,
+      /saving\s+£[\d,]+\s*(?:\/|per|a)\s+month/i,
+      /cut\s+[\w\s]+\s+by\s+£/i,
+    ],
+  },
+  {
+    intent: 'duplicate_detection',
+    patterns: [
+      /duplicate\s+(charge|transaction|payment)/i,
+      /charged\s+twice/i,
+      /double[\s-]charged/i,
+      /same\s+(charge|transaction|payment)\s+twice/i,
+      /been\s+charged\s+twice/i,
+      /duplicate\s+transactions?/i,
+    ],
+  },
+  {
+    intent: 'tax_year_summary',
+    patterns: [
+      /tax\s+year/i,
+      /self[\s-]assess/i,
+      /hmrc/i,
+      /tax\s+return/i,
+      /annual\s+(income|spending|summary)/i,
+      /business\s+expenses?/i,
+      /how\s+much\s+(did\s+i\s+earn|have\s+i\s+earned)\s+(this|last)\s+year/i,
+    ],
+  },
+  {
+    intent: 'transaction_search',
+    patterns: [
+      /show\s+(me\s+)?my\s+transactions/i,
+      /find\s+(my\s+)?transactions?/i,
+      /list\s+(my\s+)?transactions?/i,
+      /search\s+(my\s+)?transactions?/i,
+      /transactions?\s+(at|from|on)\s+/i,
+      /what\s+did\s+i\s+(buy|purchase|pay\s+for)/i,
+      /recent\s+transactions?/i,
+      /show\s+(me\s+)?purchases?/i,
+      /find\s+(my\s+)?[\w\s]*purchases?/i,
+      /(?:recent|latest)\s+[\w\s]*purchases?/i,
+    ],
+  },
+  {
+    intent: 'spending_forecast',
+    patterns: [
+      /how\s+much\s+will\s+i\s+spend\s+(this|by\s+end\s+of)\s+month/i,
+      /spending\s+forecast/i,
+      /projected?\s+spend/i,
+      /on\s+track\s+(for|to\s+spend)/i,
+      /end\s+of\s+month\s+spend/i,
+      /how\s+much\s+am\s+i\s+on\s+track\s+to\s+spend/i,
+    ],
+  },
+  {
+    intent: 'spending_trends',
+    patterns: [
+      /how\s+is\s+my\s+spending\s+trending/i,
+      /spending\s+trend/i,
+      /trending\s+up\s+on/i,
+      /am\s+i\s+spending\s+more/i,
+      /spending\s+going\s+up/i,
+      /categories?\s+(going|trending)\s+up/i,
+    ],
+  },
   {
     intent: 'spending_analysis',
     patterns: [
@@ -175,28 +306,6 @@ const RULES: Rule[] = [
       /my\s+financial\s+score/i,
       /money\s+health/i,
       /overall\s+financial\s+(position|health|status)/i,
-    ],
-  },
-  {
-    intent: 'spending_forecast',
-    patterns: [
-      /how\s+much\s+will\s+i\s+spend\s+(this|by\s+end\s+of)\s+month/i,
-      /spending\s+forecast/i,
-      /projected?\s+spend/i,
-      /on\s+track\s+(for|to\s+spend)/i,
-      /end\s+of\s+month\s+spend/i,
-      /how\s+much\s+am\s+i\s+on\s+track\s+to\s+spend/i,
-    ],
-  },
-  {
-    intent: 'spending_trends',
-    patterns: [
-      /how\s+is\s+my\s+spending\s+trending/i,
-      /spending\s+trend/i,
-      /trending\s+up\s+on/i,
-      /am\s+i\s+spending\s+more/i,
-      /spending\s+going\s+up/i,
-      /categories?\s+(going|trending)\s+up/i,
     ],
   },
   {

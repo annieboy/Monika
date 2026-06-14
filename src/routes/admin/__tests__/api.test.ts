@@ -85,6 +85,26 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
       count: vi.fn().mockResolvedValue(3),
       ...((overrides['affiliateClick'] as object) ?? {}),
     },
+    user: {
+      count: vi.fn().mockResolvedValue(42),
+      ...((overrides['user'] as object) ?? {}),
+    },
+    bankConnection: {
+      count: vi.fn().mockResolvedValue(30),
+      ...((overrides['bankConnection'] as object) ?? {}),
+    },
+    transaction: {
+      count: vi.fn().mockResolvedValue(15000),
+      ...((overrides['transaction'] as object) ?? {}),
+    },
+    conversation: {
+      count: vi.fn().mockResolvedValue(200),
+      ...((overrides['conversation'] as object) ?? {}),
+    },
+    savingsGoal: {
+      count: vi.fn().mockResolvedValue(15),
+      ...((overrides['savingsGoal'] as object) ?? {}),
+    },
   }
 }
 
@@ -208,5 +228,24 @@ describe('POST /api/jobs/trigger', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json()).toMatchObject({ error: expect.stringContaining('Unknown job') })
+  })
+})
+
+describe('GET /api/metrics', () => {
+  it('returns platform metrics with correct shape', async () => {
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/api/metrics' })
+    expect(res.statusCode).toBe(200)
+    const body = res.json<{
+      timestamp: string
+      users: { total: number; activeConnections: number; newLast7Days: number; newLast30Days: number }
+      messages: { last7Days: number; last30Days: number }
+      data: { totalTransactions: number; syncErrors: number; activeGoals: number }
+    }>()
+    expect(body.users.total).toBe(42)
+    expect(body.users.activeConnections).toBe(30)
+    expect(body.data.totalTransactions).toBe(15000)
+    expect(body.data.activeGoals).toBe(15)
+    expect(body.timestamp).toBeDefined()
   })
 })

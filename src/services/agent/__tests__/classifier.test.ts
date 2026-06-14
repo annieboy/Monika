@@ -184,3 +184,103 @@ describe('classifyIntent — LLM fallback path', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('classifyIntent — new intents (Steps 14-27)', () => {
+  // transaction_search
+  it('transaction_search: "Show me my transactions at Tesco last month"', async () => {
+    const r = await classifyIntent('Show me my transactions at Tesco last month', NO_KEY)
+    expect(r.intent).toBe('transaction_search')
+  })
+  it('transaction_search: "Find my recent Amazon purchases"', async () => {
+    const r = await classifyIntent('Find my recent Amazon purchases', NO_KEY)
+    expect(r.intent).toBe('transaction_search')
+  })
+
+  // cash_flow
+  it('cash_flow: "Will I run out of money before payday?"', async () => {
+    const r = await classifyIntent('Will I run out of money before payday?', NO_KEY)
+    expect(r.intent).toBe('cash_flow')
+  })
+  it('cash_flow: "Can I make it to payday?"', async () => {
+    const r = await classifyIntent('Can I make it to payday?', NO_KEY)
+    expect(r.intent).toBe('cash_flow')
+  })
+
+  // tax_year_summary
+  it('tax_year_summary: "Show me my tax year summary"', async () => {
+    const r = await classifyIntent('Show me my tax year summary', NO_KEY)
+    expect(r.intent).toBe('tax_year_summary')
+  })
+  it('tax_year_summary: "What were my business expenses?"', async () => {
+    const r = await classifyIntent('What were my business expenses?', NO_KEY)
+    expect(r.intent).toBe('tax_year_summary')
+  })
+
+  // duplicate_detection
+  it('duplicate_detection: "Have I been charged twice?"', async () => {
+    const r = await classifyIntent('Have I been charged twice?', NO_KEY)
+    expect(r.intent).toBe('duplicate_detection')
+  })
+  it('duplicate_detection: "Check for duplicate transactions"', async () => {
+    const r = await classifyIntent('Check for duplicate transactions', NO_KEY)
+    expect(r.intent).toBe('duplicate_detection')
+  })
+
+  // savings_simulation
+  it('savings_simulation: "If I save £200/month how long to reach my goal?"', async () => {
+    const r = await classifyIntent('If I save £200/month how long to reach my goal?', NO_KEY)
+    expect(r.intent).toBe('savings_simulation')
+  })
+  it('savings_simulation: "If I cut eating out by £50 when will I save £2000?"', async () => {
+    const r = await classifyIntent('If I cut eating out by £50 when will I save £2000?', NO_KEY)
+    expect(r.intent).toBe('savings_simulation')
+  })
+
+  // fx_transactions
+  it('fx_transactions: "How much did I spend abroad?"', async () => {
+    const r = await classifyIntent('How much did I spend abroad?', NO_KEY)
+    expect(r.intent).toBe('fx_transactions')
+  })
+  it('fx_transactions: "What are my FX fees?"', async () => {
+    const r = await classifyIntent('What are my FX fees?', NO_KEY)
+    expect(r.intent).toBe('fx_transactions')
+  })
+
+  // charity_tracker
+  it('charity_tracker: "How much have I donated to charity?"', async () => {
+    const r = await classifyIntent('How much have I donated to charity?', NO_KEY)
+    expect(r.intent).toBe('charity_tracker')
+  })
+  it('charity_tracker: "Show me my Gift Aid donations"', async () => {
+    const r = await classifyIntent('Show me my Gift Aid donations', NO_KEY)
+    expect(r.intent).toBe('charity_tracker')
+  })
+
+  // credit_health
+  it('credit_health: "How can I improve my credit score?"', async () => {
+    const r = await classifyIntent('How can I improve my credit score?', NO_KEY)
+    expect(r.intent).toBe('credit_health')
+  })
+  it('credit_health: "Tips for better credit rating"', async () => {
+    const r = await classifyIntent('Tips for better credit rating', NO_KEY)
+    expect(r.intent).toBe('credit_health')
+  })
+
+  // financial_health (existing but verify)
+  it('financial_health: "What is my financial health score?"', async () => {
+    const r = await classifyIntent('What is my financial health score?', NO_KEY)
+    expect(r.intent).toBe('financial_health')
+  })
+
+  // spending_trends (existing)
+  it('spending_trends: "How is my spending trending?"', async () => {
+    const r = await classifyIntent('How is my spending trending?', NO_KEY)
+    expect(r.intent).toBe('spending_trends')
+  })
+
+  // spending_forecast (existing)
+  it('spending_forecast: "What is my spending forecast?"', async () => {
+    const r = await classifyIntent('What is my spending forecast?', NO_KEY)
+    expect(r.intent).toBe('spending_forecast')
+  })
+})

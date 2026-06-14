@@ -18,6 +18,15 @@ export const INTENTS = [
   'financial_health',
   'account_management',
   'onboarding_help',
+  'transaction_search',
+  'cash_flow',
+  'tax_year_summary',
+  'duplicate_detection',
+  'savings_simulation',
+  'fx_transactions',
+  'charity_tracker',
+  'category_deep_dive',
+  'credit_health',
   'unknown',
 ] as const
 

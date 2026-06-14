@@ -23,6 +23,16 @@ import { calculateNetWorth, formatNetWorth } from '../analytics/netWorthService.
 import { getSpendingTrends, formatSpendingTrends } from '../analytics/spendingTrendService.js'
 import { getSpendingForecast, formatSpendingForecast } from '../analytics/spendingForecastService.js'
 import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytics/financialHealthService.js'
+import { parseTransactionSearch, searchTransactions, formatTransactionSearch } from '../analytics/transactionSearchService.js'
+import { getCashFlowForecast, formatCashFlowForecast } from '../analytics/cashFlowService.js'
+import { getTaxYearSummary, formatTaxYearSummary } from '../analytics/taxYearService.js'
+import { detectDuplicateTransactions, formatDuplicateTransactions } from '../analytics/duplicateTransactionService.js'
+import { getMerchantInsight, formatMerchantInsight } from '../analytics/merchantInsightService.js'
+import { parseSimulation, runSavingsSimulation, formatSimulationResult } from '../savings/savingsSimulationService.js'
+import { getFxTransactions, formatFxSummary } from '../analytics/fxTransactionService.js'
+import { getCharitySummary, formatCharitySummary } from '../analytics/charityTrackerService.js'
+import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/categoryDeepDiveService.js'
+import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/creditHealthService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -177,6 +187,12 @@ export async function routeIntent(
       const merchant = merchantFilter ?? message.match(/(?:at|on|from)\s+([A-Za-z0-9 &]+?)(?:\?|$|\s+in|\s+last|\s+this)/i)?.[1]?.trim()
       if (!merchant) {
         structuredText = "Which merchant would you like to check? For example: \"How much have I spent at Tesco this month?\""
+      } else if (!mFrom && !mTo && /insight|history|detail|tell me about|how often|visits?/i.test(message)) {
+        // Enriched merchant insight when no date filter and user wants historical context
+        const insight = await getMerchantInsight(prisma, userId, merchant)
+        structuredText = insight
+          ? formatMerchantInsight(insight)
+          : `No transactions found for *${merchant}*.`
       } else {
         const result = await analytics.getSpendingByMerchantName(userId, merchant, mFrom, mTo)
         structuredText = formatMerchantSpend(merchant, result, mFrom)
@@ -237,6 +253,79 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'credit_health': {
+      const creditReport = await getCreditHealthReport(prisma, userId)
+      structuredText = formatCreditHealthReport(creditReport)
+      break
+    }
+
+    case 'fx_transactions': {
+      const fxSummary = await getFxTransactions(prisma, userId)
+      structuredText = formatFxSummary(fxSummary)
+      break
+    }
+
+    case 'charity_tracker': {
+      const charitySummary = await getCharitySummary(prisma, userId)
+      structuredText = formatCharitySummary(charitySummary)
+      break
+    }
+
+    case 'category_deep_dive': {
+      // Extract category from message
+      const catMatch = message.match(
+        /(?:breakdown\s+(?:of|for)|detailed?\s+(?:spending|breakdown)\s+(?:on|for)|more\s+details?\s+(?:on|about)\s+my|drill\s+down\s+(?:into|on)|deep\s+dive\s+(?:into|on))\s+(?:my\s+)?([\w\s]+?)(?:\s+spending|\s*\?|$)/i,
+      )
+      const cat = catMatch?.[1]?.trim() ?? categoryFilter
+      if (!cat) {
+        structuredText = `Which category would you like a breakdown for? E.g. *"breakdown of my groceries"* or *"detail on eating out"*.`
+      } else {
+        const deepDive = await getCategoryDeepDive(prisma, userId, cat)
+        structuredText = formatCategoryDeepDive(deepDive)
+      }
+      break
+    }
+
+    case 'savings_simulation': {
+      const simInput = parseSimulation(message)
+      if (!simInput) {
+        structuredText = `Try: *"If I save £200/month, how long to reach my holiday goal?"* or *"If I cut eating out by £50, when do I hit £2,000?"*`
+      } else {
+        const simResult = await runSavingsSimulation(prisma, userId, simInput)
+        structuredText = formatSimulationResult(simResult)
+      }
+      break
+    }
+
+    case 'duplicate_detection': {
+      const dupes = await detectDuplicateTransactions(prisma, userId)
+      structuredText = formatDuplicateTransactions(dupes)
+      break
+    }
+
+    case 'tax_year_summary': {
+      const taxSummary = await getTaxYearSummary(prisma, userId)
+      structuredText = formatTaxYearSummary(taxSummary)
+      break
+    }
+
+    case 'cash_flow': {
+      const forecast = await getCashFlowForecast(prisma, userId)
+      structuredText = formatCashFlowForecast(forecast)
+      break
+    }
+
+    case 'transaction_search': {
+      const filters = parseTransactionSearch(message)
+      if (!filters) {
+        structuredText = `What would you like to search for? Try: *"Show me transactions at Tesco last month"* or *"Find purchases over £50 this month"*.`
+      } else {
+        const results = await searchTransactions(prisma, userId, filters)
+        structuredText = formatTransactionSearch(results, filters)
+      }
       break
     }
 
