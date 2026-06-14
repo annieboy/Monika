@@ -156,6 +156,25 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'account_management',
+    patterns: [
+      /stop\s+(sending|messages|offers|notifications|tips)/i,
+      /unsubscribe/i,
+      /opt\s*out/i,
+      /delete\s+(my\s+)?(account|data)/i,
+      /remove\s+(my\s+)?(account|data)/i,
+      /what\s+data\s+(do\s+you|have\s+you)\s+(hold|have|store|collect)/i,
+      /my\s+(personal\s+)?data/i,
+      /right\s+to\s+be\s+forgotten/i,
+      /gdpr/i,
+      /privacy/i,
+      /change\s+my\s+name/i,
+      /update\s+my\s+(name|details|profile)/i,
+      /what('?s|\s+is)\s+my\s+name/i,
+      /my\s+(account|profile)\s+(settings?|details?|info)/i,
+    ],
+  },
+  {
     intent: 'onboarding_help',
     patterns: [
       /how\s+do\s+i\s+(connect|link|start|use|get\s+started)/i,
