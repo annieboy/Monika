@@ -19,6 +19,7 @@ export const INTENTS = [
   'account_management',
   'onboarding_help',
   'transaction_search',
+  'cash_flow',
   'unknown',
 ] as const
 

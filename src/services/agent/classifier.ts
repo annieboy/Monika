@@ -211,6 +211,18 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'cash_flow',
+    patterns: [
+      /cash\s+flow/i,
+      /will\s+i\s+(run\s+out|have\s+enough)\s+(of\s+)?money/i,
+      /can\s+i\s+make\s+it\s+to\s+payday/i,
+      /shortfall/i,
+      /projected\s+balance/i,
+      /before\s+(my\s+)?next\s+payday/i,
+      /how\s+long\s+will\s+my\s+money\s+last/i,
+    ],
+  },
+  {
     intent: 'transaction_search',
     patterns: [
       /show\s+(me\s+)?my\s+transactions/i,
