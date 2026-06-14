@@ -22,6 +22,9 @@ export type OpportunityJobName =
   | 'spending-trend-alerts'
   | 'reconnect-nudge'
   | 'budget-alerts'
+  | 'monthly-aggregation'
+  | 'anomaly-scoring'
+  | 'anomaly-alerts'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -178,6 +181,39 @@ export async function scheduleRecurringJobs(): Promise<void> {
     { pattern: '0 12 * * *', tz: 'UTC' },
     {
       name: 'budget-alerts',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Nightly at 02:30 UTC — pre-compute monthly spend summaries per user
+  await queue.upsertJobScheduler(
+    'nightly-monthly-aggregation',
+    { pattern: '30 2 * * *', tz: 'UTC' },
+    {
+      name: 'monthly-aggregation',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Every 6 hours — score new transactions for anomalies (runs after sync)
+  await queue.upsertJobScheduler(
+    'anomaly-scoring',
+    { pattern: '0 */6 * * *', tz: 'UTC' },
+    {
+      name: 'anomaly-scoring',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Daily at 08:30 UTC — send proactive anomaly alerts to users
+  await queue.upsertJobScheduler(
+    'daily-anomaly-alerts',
+    { pattern: '30 8 * * *', tz: 'UTC' },
+    {
+      name: 'anomaly-alerts',
       data: {},
       opts: { priority: 2 },
     },

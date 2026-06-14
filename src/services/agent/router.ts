@@ -37,6 +37,7 @@ import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
 import { trackEvent } from '../analytics/events.js'
+import { validateAndFormatResponse } from './responseValidator.js'
 import { config } from '../../config.js'
 
 export const PAYMENT_REJECTION =
@@ -346,8 +347,10 @@ export async function routeIntent(
     if (polished === structuredText) {
       trackEvent(prisma, 'ai_error', userId, { intent, reason: 'llm_fallback' }).catch(() => undefined)
     }
-    return polished
+    const { text } = validateAndFormatResponse(polished, { toolsUsed: [intent] })
+    return text
   }
 
-  return structuredText
+  const { text } = validateAndFormatResponse(structuredText, { toolsUsed: [intent] })
+  return text
 }

@@ -23,6 +23,9 @@ import { pruneOldSessions } from '../services/conversation/sessionService.js'
 import { runSpendingTrendAlertBatch } from '../services/analytics/spendingTrendService.js'
 import { runReconnectNudgeBatch } from '../services/banking/reconnectNudgeService.js'
 import { runBudgetAlertBatch } from '../services/budget/budgetAlertService.js'
+import { runMonthlyAggregationBatch } from '../services/analytics/monthlyAggregationService.js'
+import { runAnomalyScoreBatch } from '../services/analytics/anomalyScoreService.js'
+import { runAnomalyAlertBatch } from '../services/analytics/anomalyAlertService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -147,6 +150,21 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
 
         case 'budget-alerts': {
           const result = await runBudgetAlertBatch(prisma)
+          return { processed: result.alerted, errors: result.errors }
+        }
+
+        case 'monthly-aggregation': {
+          const result = await runMonthlyAggregationBatch(prisma)
+          return { processed: result.aggregated, errors: result.errors }
+        }
+
+        case 'anomaly-scoring': {
+          const result = await runAnomalyScoreBatch(prisma)
+          return { processed: result.scored, errors: result.errors }
+        }
+
+        case 'anomaly-alerts': {
+          const result = await runAnomalyAlertBatch(prisma)
           return { processed: result.alerted, errors: result.errors }
         }
 

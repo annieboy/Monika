@@ -44,9 +44,9 @@ describe('scheduleRecurringJobs', () => {
     mockUpsertJobScheduler.mockClear()
   })
 
-  it('calls upsertJobScheduler exactly twelve times', async () => {
+  it('calls upsertJobScheduler exactly fifteen times', async () => {
     await scheduleRecurringJobs()
-    expect(mockUpsertJobScheduler).toHaveBeenCalledTimes(12)
+    expect(mockUpsertJobScheduler).toHaveBeenCalledTimes(15)
   })
 
   it('schedules detect-opportunities with cron 0 9 * * *', async () => {
