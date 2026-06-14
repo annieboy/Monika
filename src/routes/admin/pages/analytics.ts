@@ -51,7 +51,6 @@ interface AnalyticsData {
 }
 
 async function fetchAnalytics(prisma: PrismaClient): Promise<AnalyticsData> {
-  const now = new Date()
   const t7  = daysAgo(7)
   const t14 = daysAgo(14)
   const t30 = daysAgo(30)

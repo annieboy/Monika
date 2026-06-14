@@ -106,9 +106,9 @@ export async function opportunityAnalyticsPage(prisma: PrismaClient): Promise<st
     `,
   ])
 
-  const pct = (n: number, d: number) => d === 0 ? '—' : `${((n / d) * 100).toFixed(1)}%`
+  const pct = (n: number, d: number): string => d === 0 ? '—' : `${((n / d) * 100).toFixed(1)}%`
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fmt = (n: any) => n == null ? '—' : `£${Number(n).toFixed(2)}`
+  const fmt = (n: any): string => n == null ? '—' : `£${Number(n).toFixed(2)}`
 
   const categoryRows = (categoryStats as {
     category: string; delivered: number; clicked: number; converted: number; dismissed: number

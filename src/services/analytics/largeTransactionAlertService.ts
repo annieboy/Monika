@@ -130,7 +130,7 @@ export async function checkAndAlertLargeTransaction(
   const phone = await getPhone(prisma, userId)
   if (!phone) return { alerted: false, reason: 'no_phone' }
 
-  const fmt = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmt = (n: number): string => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const merchantLabel = merchant ?? 'an unknown merchant'
   const msg =
     `🔔 *Large transaction alert*\n\n` +

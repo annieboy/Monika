@@ -284,7 +284,6 @@ describe('recordPostback', () => {
 
   it('updates click with APPROVED status and commission amount', async () => {
     const click = { id: 'click-1', opportunityId: null }
-    ;(makePrisma().affiliateClick.findUnique as ReturnType<typeof vi.fn>)
     const prisma = makePrisma()
     ;(prisma.affiliateClick.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(click)
 

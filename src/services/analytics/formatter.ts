@@ -3,7 +3,6 @@ import type {
   AffordabilityProfile,
   CategorySpend,
   MonthlyComparison,
-  RecentTransaction,
   SafeToSpend,
   Subscription,
   UnusualTransaction,
@@ -167,7 +166,7 @@ export function formatSavingsQuery(monthlyIncome: number, thisMonthSpend: number
   return out.trim()
 }
 
-export function formatUpcomingBills(subscriptions: Subscription[], committedThisMonth: number): string {
+export function formatUpcomingBills(subscriptions: Subscription[], _committedThisMonth: number): string {
   if (subscriptions.length === 0) {
     return `I don't see any upcoming direct debits or subscriptions in your transaction history.`
   }

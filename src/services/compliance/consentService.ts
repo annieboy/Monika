@@ -46,7 +46,7 @@ export function isInQuietHours(start: string, end: string, now = new Date()): bo
     hour12: false,
   }).format(now)
 
-  const toMinutes = (hhmm: string) => {
+  const toMinutes = (hhmm: string): number => {
     const parts = hhmm.split(':').map(Number)
     return (parts[0] ?? 0) * 60 + (parts[1] ?? 0)
   }

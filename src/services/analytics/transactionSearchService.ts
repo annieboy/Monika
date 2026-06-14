@@ -180,13 +180,13 @@ export async function searchTransactions(
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const fmtAmt = (n: number) => {
+const fmtAmt = (n: number): string => {
   const abs = Math.abs(n)
   const sign = n >= 0 ? '+' : '-'
   return `${sign}£${abs.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-const fmtDate = (d: Date) =>
+const fmtDate = (d: Date): string =>
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 export function formatTransactionSearch(

@@ -494,7 +494,6 @@ export class TransactionAnalyticsService {
    */
   async getSafeToSpend(userId: string, days: number): Promise<SafeToSpend> {
     const now = new Date()
-    const periodEnd = new Date(now.getTime() + days * 86_400_000)
     const periodLabel = days <= 2 ? 'this weekend' : days <= 7 ? 'this week' : `the next ${days} days`
 
     // Current balances (current accounts only, not savings)

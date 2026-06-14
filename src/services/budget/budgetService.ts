@@ -14,7 +14,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
 
-const fmt = (n: number) =>
+const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 // ── Parsing ───────────────────────────────────────────────────────────────────

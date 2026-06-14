@@ -35,7 +35,7 @@ const VALID_COMMISSION_TYPES = new Set(['cpa', 'cpl', 'revenue_share'])
 function parseRow(
   headers: string[],
   values: string[],
-  rowIndex: number,
+  _rowIndex: number,
 ): { input: OfferInput; error?: never } | { input?: never; error: string } {
   const row: Record<string, string> = {}
   for (let i = 0; i < headers.length; i++) {
@@ -121,8 +121,6 @@ export async function importOffersFromCsv(
   csvText: string,
   triggeredBy?: string,
 ): Promise<ImportResult> {
-  const startedAt = new Date()
-
   // Create ingestion run record
   const run = await prisma.offerIngestionRun.create({
     data: {
