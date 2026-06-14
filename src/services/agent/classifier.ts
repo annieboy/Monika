@@ -168,6 +168,16 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'financial_health',
+    patterns: [
+      /financial\s+health/i,
+      /how\s+(am\s+i\s+doing\s+financially|is\s+my\s+financial\s+health)/i,
+      /my\s+financial\s+score/i,
+      /money\s+health/i,
+      /overall\s+financial\s+(position|health|status)/i,
+    ],
+  },
+  {
     intent: 'spending_forecast',
     patterns: [
       /how\s+much\s+will\s+i\s+spend\s+(this|by\s+end\s+of)\s+month/i,

@@ -15,6 +15,7 @@ export const INTENTS = [
   'net_worth',
   'spending_trends',
   'spending_forecast',
+  'financial_health',
   'account_management',
   'onboarding_help',
   'unknown',

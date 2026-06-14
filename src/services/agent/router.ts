@@ -22,6 +22,7 @@ import { handleBudget } from '../budget/budgetService.js'
 import { calculateNetWorth, formatNetWorth } from '../analytics/netWorthService.js'
 import { getSpendingTrends, formatSpendingTrends } from '../analytics/spendingTrendService.js'
 import { getSpendingForecast, formatSpendingForecast } from '../analytics/spendingForecastService.js'
+import { getFinancialHealthScore, formatFinancialHealthScore } from '../analytics/financialHealthService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -230,6 +231,12 @@ export async function routeIntent(
     case 'spending_forecast': {
       const forecast = await getSpendingForecast(prisma, userId)
       structuredText = formatSpendingForecast(forecast)
+      break
+    }
+
+    case 'financial_health': {
+      const healthScore = await getFinancialHealthScore(prisma, userId)
+      structuredText = formatFinancialHealthScore(healthScore)
       break
     }
 
