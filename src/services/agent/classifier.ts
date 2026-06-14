@@ -168,6 +168,17 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'spending_trends',
+    patterns: [
+      /how\s+is\s+my\s+spending\s+trending/i,
+      /spending\s+trend/i,
+      /trending\s+up\s+on/i,
+      /am\s+i\s+spending\s+more/i,
+      /spending\s+going\s+up/i,
+      /categories?\s+(going|trending)\s+up/i,
+    ],
+  },
+  {
     intent: 'net_worth',
     patterns: [
       /net\s+worth/i,

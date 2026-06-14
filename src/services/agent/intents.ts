@@ -13,6 +13,7 @@ export const INTENTS = [
   'payment_request',
   'budget',
   'net_worth',
+  'spending_trends',
   'account_management',
   'onboarding_help',
   'unknown',

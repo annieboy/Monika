@@ -20,6 +20,7 @@ import { runGoalProgressBatch } from '../services/notifications/goalProgressServ
 import { runWeeklyDigestBatch } from '../services/notifications/weeklyDigestService.js'
 import { runExpiryNudgeBatch } from '../services/notifications/expiryNudgeService.js'
 import { pruneOldSessions } from '../services/conversation/sessionService.js'
+import { runSpendingTrendAlertBatch } from '../services/analytics/spendingTrendService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -130,6 +131,11 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
         case 'prune-sessions': {
           const result = await pruneOldSessions(prisma)
           return { processed: result.deleted, errors: 0 }
+        }
+
+        case 'spending-trend-alerts': {
+          const result = await runSpendingTrendAlertBatch(prisma)
+          return { processed: result.notified, errors: result.errors }
         }
 
         default: {

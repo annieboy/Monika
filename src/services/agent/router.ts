@@ -20,6 +20,7 @@ import { parseGoalFromMessage, createGoal, listGoals } from '../savings/savingsG
 import { handleAccountManagement } from '../account/accountManagementService.js'
 import { handleBudget } from '../budget/budgetService.js'
 import { calculateNetWorth, formatNetWorth } from '../analytics/netWorthService.js'
+import { getSpendingTrends, formatSpendingTrends } from '../analytics/spendingTrendService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -216,6 +217,12 @@ export async function routeIntent(
     case 'net_worth': {
       const breakdown = await calculateNetWorth(prisma, userId)
       structuredText = formatNetWorth(breakdown)
+      break
+    }
+
+    case 'spending_trends': {
+      const trendResult = await getSpendingTrends(prisma, userId)
+      structuredText = formatSpendingTrends(trendResult)
       break
     }
 

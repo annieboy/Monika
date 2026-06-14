@@ -19,6 +19,7 @@ export type OpportunityJobName =
   | 'weekly-digest'
   | 'expiry-nudge'
   | 'prune-sessions'
+  | 'spending-trend-alerts'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -155,6 +156,17 @@ export async function scheduleRecurringJobs(): Promise<void> {
       name: 'prune-sessions',
       data: {},
       opts: { priority: 4 },
+    },
+  )
+
+  // Monthly on the 5th at 10:00 UTC — alert users about rising spending categories
+  await queue.upsertJobScheduler(
+    'monthly-spending-trend-alerts',
+    { pattern: '0 10 5 * *', tz: 'UTC' },
+    {
+      name: 'spending-trend-alerts',
+      data: {},
+      opts: { priority: 3 },
     },
   )
 }
