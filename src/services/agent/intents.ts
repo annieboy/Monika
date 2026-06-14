@@ -26,6 +26,7 @@ export const INTENTS = [
   'fx_transactions',
   'charity_tracker',
   'category_deep_dive',
+  'credit_health',
   'unknown',
 ] as const
 

@@ -211,6 +211,18 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'credit_health',
+    patterns: [
+      /credit\s+(score|rating|health|report)/i,
+      /how\s+(is|can\s+i\s+improve)\s+my\s+credit/i,
+      /improve\s+my\s+credit/i,
+      /credit\s+file/i,
+      /will\s+(?:this|i)\s+(affect|hurt|help)\s+my\s+credit/i,
+      /tips?\s+for\s+(better\s+)?credit/i,
+      /mortgage\s+(?:readiness|application|eligibility)/i,
+    ],
+  },
+  {
     intent: 'fx_transactions',
     patterns: [
       /foreign\s+(currency|transaction|charge)/i,

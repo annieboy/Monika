@@ -32,6 +32,7 @@ import { parseSimulation, runSavingsSimulation, formatSimulationResult } from '.
 import { getFxTransactions, formatFxSummary } from '../analytics/fxTransactionService.js'
 import { getCharitySummary, formatCharitySummary } from '../analytics/charityTrackerService.js'
 import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/categoryDeepDiveService.js'
+import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/creditHealthService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -252,6 +253,12 @@ export async function routeIntent(
     case 'financial_health': {
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
+      break
+    }
+
+    case 'credit_health': {
+      const creditReport = await getCreditHealthReport(prisma, userId)
+      structuredText = formatCreditHealthReport(creditReport)
       break
     }
 
