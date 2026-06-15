@@ -41,6 +41,7 @@ import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory
 import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
 import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
 import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
+import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -349,6 +350,10 @@ export async function routeIntent(
     }
 
     case 'tax_year_summary': {
+      if (isTaxEstimatorRequest(message)) {
+        structuredText = await estimateTax(prisma, userId)
+        break
+      }
       const taxSummary = await getTaxYearSummary(prisma, userId)
       structuredText = formatTaxYearSummary(taxSummary)
       break
