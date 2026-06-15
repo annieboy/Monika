@@ -27,6 +27,7 @@ export const INTENTS = [
   'charity_tracker',
   'category_deep_dive',
   'credit_health',
+  'spend_down',
   'unknown',
 ] as const
 

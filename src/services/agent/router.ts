@@ -33,6 +33,8 @@ import { getFxTransactions, formatFxSummary } from '../analytics/fxTransactionSe
 import { getCharitySummary, formatCharitySummary } from '../analytics/charityTrackerService.js'
 import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/categoryDeepDiveService.js'
 import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/creditHealthService.js'
+import { handleSpendDown } from '../savings/spendDownService.js'
+import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../savings/savingsRecommendationService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -101,6 +103,11 @@ export async function routeIntent(
   // Budget management — works without bank connection (budgets stored in auditLog)
   if (intent === 'budget') {
     return handleBudget(prisma, userId, message)
+  }
+
+  // Spend-down / debt payoff goals — works without bank connection
+  if (intent === 'spend_down') {
+    return handleSpendDown(prisma, userId, message)
   }
 
   // Savings goals — handled before bank check (listing works without bank)
@@ -219,6 +226,9 @@ export async function routeIntent(
     }
 
     case 'savings_query': {
+      if (isSavingsRecommendationRequest(message)) {
+        return getSavingsRecommendations(prisma, userId)
+      }
       const [profile, snap] = await Promise.all([
         analytics.getAffordabilityProfile(userId),
         analytics.getFinancialSnapshot(userId),

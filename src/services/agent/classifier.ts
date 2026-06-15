@@ -93,6 +93,18 @@ const RULES: Rule[] = [
     ],
   },
   {
+    intent: 'spend_down',
+    patterns: [
+      /pay\s+off\s+(?:my\s+)?(?:credit\s+card|overdraft|loan|debt)/i,
+      /pay\s+down\s+(?:my\s+)?(?:credit\s+card|overdraft|loan|debt)/i,
+      /clear\s+(?:my\s+)?(?:credit\s+card|overdraft|loan|debt)/i,
+      /\bpayoff\b/i,
+      /\bdebt\s+(?:free|repayment|payoff)\b/i,
+      /\bpay\s+off\s+£/i,
+      /\bclear\s+£/i,
+    ],
+  },
+  {
     intent: 'upcoming_bills',
     patterns: [
       /upcoming\s+bills?/i,
