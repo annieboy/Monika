@@ -13,6 +13,7 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       findMany: vi.fn().mockResolvedValue([]),
     },
     account: { findMany: vi.fn().mockResolvedValue([]) },
+    recurringPayment: { findMany: vi.fn().mockResolvedValue([]) },
     onboardingToken: { create: vi.fn().mockResolvedValue({}) },
     auditLog: { create: vi.fn().mockResolvedValue({}) },
     ...overrides,

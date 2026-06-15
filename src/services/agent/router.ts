@@ -33,6 +33,18 @@ import { getFxTransactions, formatFxSummary } from '../analytics/fxTransactionSe
 import { getCharitySummary, formatCharitySummary } from '../analytics/charityTrackerService.js'
 import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/categoryDeepDiveService.js'
 import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/creditHealthService.js'
+import { handleSpendDown } from '../savings/spendDownService.js'
+import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../savings/savingsRecommendationService.js'
+import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarService.js'
+import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest } from '../analytics/creditSimulationService.js'
+import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory } from '../switching/switchingDetectorService.js'
+import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
+import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
+import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
+import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
+import { recommendRewardCard, isRewardCardRequest } from '../analytics/rewardCardService.js'
+import { checkPensionContributions, isPensionRequest } from '../analytics/pensionCheckerService.js'
+import { calculatePropertyAffordability, isPropertyAffordabilityRequest } from '../analytics/propertyAffordabilityService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -103,8 +115,16 @@ export async function routeIntent(
     return handleBudget(prisma, userId, message)
   }
 
+  // Spend-down / debt payoff goals — works without bank connection
+  if (intent === 'spend_down') {
+    return handleSpendDown(prisma, userId, message)
+  }
+
   // Savings goals — handled before bank check (listing works without bank)
   if (intent === 'savings_goal') {
+    if (isGoalSuggestionRequest(message)) {
+      return suggestFinancialGoals(prisma, userId)
+    }
     if (/my\s+savings?\s+goals?|how\s+am\s+i\s+doing/i.test(message)) {
       return listGoals(prisma, userId)
     }
@@ -142,6 +162,24 @@ export async function routeIntent(
 
   switch (intent) {
     case 'spending_analysis': {
+      if (isSpendingPersonalityRequest(message)) {
+        structuredText = await getSpendingPersonality(prisma, userId)
+        break
+      }
+      if (isRewardCardRequest(message)) {
+        const threeMonthsAgo = new Date(); threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+        const cats = await prisma.transaction.groupBy({
+          by: ['category'],
+          where: { userId, amount: { gt: 0 }, transactionDate: { gte: threeMonthsAgo } },
+          _sum: { amount: true },
+        })
+        const spendInput = cats.map(c => ({
+          category: (c.category ?? 'other').toLowerCase(),
+          monthly: Number((c._sum as { amount?: unknown }).amount ?? 0) / 3,
+        }))
+        structuredText = recommendRewardCard(spendInput)
+        break
+      }
       const [categories, comparison] = await Promise.all([
         analytics.getSpendingByCategory(userId, fromDate, toDate, categoryFilter),
         analytics.getMonthlyComparison(userId, categoryFilter),
@@ -151,8 +189,13 @@ export async function routeIntent(
     }
 
     case 'subscription_detection': {
-      const subscriptions = await analytics.getSubscriptions(userId)
-      structuredText = formatSubscriptions(subscriptions)
+      if (isSwitchingRequest(message)) {
+        const cat = extractSwitchingCategory(message)
+        structuredText = await checkSwitchingOpportunity(prisma, userId, cat)
+      } else {
+        const subscriptions = await analytics.getSubscriptions(userId)
+        structuredText = formatSubscriptions(subscriptions)
+      }
       break
     }
 
@@ -170,6 +213,10 @@ export async function routeIntent(
     }
 
     case 'affordability_question': {
+      if (isPropertyAffordabilityRequest(message)) {
+        structuredText = await calculatePropertyAffordability(prisma, userId, message)
+        break
+      }
       const profile = await analytics.getAffordabilityProfile(userId)
       structuredText = formatAffordability(profile, message)
       break
@@ -219,6 +266,13 @@ export async function routeIntent(
     }
 
     case 'savings_query': {
+      if (isEmergencyFundRequest(message)) {
+        structuredText = await getEmergencyFundStatus(prisma, userId)
+        break
+      }
+      if (isSavingsRecommendationRequest(message)) {
+        return getSavingsRecommendations(prisma, userId)
+      }
       const [profile, snap] = await Promise.all([
         analytics.getAffordabilityProfile(userId),
         analytics.getFinancialSnapshot(userId),
@@ -228,8 +282,12 @@ export async function routeIntent(
     }
 
     case 'upcoming_bills': {
-      const subscriptions = await analytics.getSubscriptions(userId)
-      structuredText = formatUpcomingBills(subscriptions, 0)
+      if (isBillCalendarRequest(message)) {
+        structuredText = await getUpcomingBills(prisma, userId)
+      } else {
+        const subscriptions = await analytics.getSubscriptions(userId)
+        structuredText = formatUpcomingBills(subscriptions, 0)
+      }
       break
     }
 
@@ -252,14 +310,23 @@ export async function routeIntent(
     }
 
     case 'financial_health': {
+      if (isPensionRequest(message)) {
+        structuredText = await checkPensionContributions(prisma, userId, message)
+        break
+      }
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
       break
     }
 
     case 'credit_health': {
-      const creditReport = await getCreditHealthReport(prisma, userId)
-      structuredText = formatCreditHealthReport(creditReport)
+      if (isCreditSimulationRequest(message)) {
+        const scenario = parseCreditSimulation(message) ?? { type: 'generic' as const }
+        structuredText = await simulateCreditImpact(prisma, userId, scenario)
+      } else {
+        const creditReport = await getCreditHealthReport(prisma, userId)
+        structuredText = formatCreditHealthReport(creditReport)
+      }
       break
     }
 
@@ -308,6 +375,10 @@ export async function routeIntent(
     }
 
     case 'tax_year_summary': {
+      if (isTaxEstimatorRequest(message)) {
+        structuredText = await estimateTax(prisma, userId)
+        break
+      }
       const taxSummary = await getTaxYearSummary(prisma, userId)
       structuredText = formatTaxYearSummary(taxSummary)
       break
