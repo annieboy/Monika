@@ -42,6 +42,7 @@ import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/eme
 import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
 import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
 import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
+import { recommendRewardCard, isRewardCardRequest } from '../analytics/rewardCardService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -161,6 +162,20 @@ export async function routeIntent(
     case 'spending_analysis': {
       if (isSpendingPersonalityRequest(message)) {
         structuredText = await getSpendingPersonality(prisma, userId)
+        break
+      }
+      if (isRewardCardRequest(message)) {
+        const threeMonthsAgo = new Date(); threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+        const cats = await prisma.transaction.groupBy({
+          by: ['category'],
+          where: { userId, amount: { gt: 0 }, transactionDate: { gte: threeMonthsAgo } },
+          _sum: { amount: true },
+        })
+        const spendInput = cats.map(c => ({
+          category: (c.category ?? 'other').toLowerCase(),
+          monthly: Number((c._sum as { amount?: unknown }).amount ?? 0) / 3,
+        }))
+        structuredText = recommendRewardCard(spendInput)
         break
       }
       const [categories, comparison] = await Promise.all([
