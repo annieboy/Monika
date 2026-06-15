@@ -26,6 +26,11 @@ import { runBudgetAlertBatch } from '../services/budget/budgetAlertService.js'
 import { runMonthlyAggregationBatch } from '../services/analytics/monthlyAggregationService.js'
 import { runAnomalyScoreBatch } from '../services/analytics/anomalyScoreService.js'
 import { runAnomalyAlertBatch } from '../services/analytics/anomalyAlertService.js'
+import { runPriceChangeAlertBatch } from '../services/notifications/priceChangeAlertService.js'
+import { runLowBalanceAlertBatch } from '../services/notifications/lowBalanceAlertService.js'
+import { runSubscriptionAuditBatch } from '../services/notifications/subscriptionAuditService.js'
+import { runDebtMilestoneBatch } from '../services/notifications/debtMilestoneService.js'
+import { runInactivityNudgeBatch } from '../services/notifications/inactivityNudgeService.js'
 import { createRedisConnection } from '../queues/connection.js'
 import { OPPORTUNITY_QUEUE, type OpportunityJobName } from '../queues/opportunityQueue.js'
 import { logger } from '../logger.js'
@@ -166,6 +171,31 @@ export function startOpportunityWorker(prisma: PrismaClient): Worker {
         case 'anomaly-alerts': {
           const result = await runAnomalyAlertBatch(prisma)
           return { processed: result.alerted, errors: result.errors }
+        }
+
+        case 'price-change-alerts': {
+          const result = await runPriceChangeAlertBatch(prisma)
+          return { processed: result.processed, errors: result.errors }
+        }
+
+        case 'low-balance-alerts': {
+          const result = await runLowBalanceAlertBatch(prisma)
+          return { processed: result.processed, errors: result.errors }
+        }
+
+        case 'subscription-audit': {
+          const result = await runSubscriptionAuditBatch(prisma)
+          return { processed: result.processed, errors: result.errors }
+        }
+
+        case 'debt-milestones': {
+          const result = await runDebtMilestoneBatch(prisma)
+          return { processed: result.processed, errors: result.errors }
+        }
+
+        case 'inactivity-nudge': {
+          const result = await runInactivityNudgeBatch(prisma)
+          return { processed: result.processed, errors: result.errors }
         }
 
         default: {
