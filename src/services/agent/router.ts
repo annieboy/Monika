@@ -35,6 +35,7 @@ import { getCategoryDeepDive, formatCategoryDeepDive } from '../analytics/catego
 import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/creditHealthService.js'
 import { handleSpendDown } from '../savings/spendDownService.js'
 import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../savings/savingsRecommendationService.js'
+import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -238,8 +239,12 @@ export async function routeIntent(
     }
 
     case 'upcoming_bills': {
-      const subscriptions = await analytics.getSubscriptions(userId)
-      structuredText = formatUpcomingBills(subscriptions, 0)
+      if (isBillCalendarRequest(message)) {
+        structuredText = await getUpcomingBills(prisma, userId)
+      } else {
+        const subscriptions = await analytics.getSubscriptions(userId)
+        structuredText = formatUpcomingBills(subscriptions, 0)
+      }
       break
     }
 
