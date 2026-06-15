@@ -43,6 +43,7 @@ import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analyti
 import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
 import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
 import { recommendRewardCard, isRewardCardRequest } from '../analytics/rewardCardService.js'
+import { checkPensionContributions, isPensionRequest } from '../analytics/pensionCheckerService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -304,6 +305,10 @@ export async function routeIntent(
     }
 
     case 'financial_health': {
+      if (isPensionRequest(message)) {
+        structuredText = await checkPensionContributions(prisma, userId, message)
+        break
+      }
       const healthScore = await getFinancialHealthScore(prisma, userId)
       structuredText = formatFinancialHealthScore(healthScore)
       break
