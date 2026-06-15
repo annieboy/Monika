@@ -38,6 +38,7 @@ import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../sa
 import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarService.js'
 import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest } from '../analytics/creditSimulationService.js'
 import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory } from '../switching/switchingDetectorService.js'
+import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -234,6 +235,10 @@ export async function routeIntent(
     }
 
     case 'savings_query': {
+      if (isEmergencyFundRequest(message)) {
+        structuredText = await getEmergencyFundStatus(prisma, userId)
+        break
+      }
       if (isSavingsRecommendationRequest(message)) {
         return getSavingsRecommendations(prisma, userId)
       }
