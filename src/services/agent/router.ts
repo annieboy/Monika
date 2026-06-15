@@ -40,6 +40,7 @@ import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest 
 import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory } from '../switching/switchingDetectorService.js'
 import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
 import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
+import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -117,6 +118,9 @@ export async function routeIntent(
 
   // Savings goals — handled before bank check (listing works without bank)
   if (intent === 'savings_goal') {
+    if (isGoalSuggestionRequest(message)) {
+      return suggestFinancialGoals(prisma, userId)
+    }
     if (/my\s+savings?\s+goals?|how\s+am\s+i\s+doing/i.test(message)) {
       return listGoals(prisma, userId)
     }
