@@ -37,6 +37,7 @@ import { handleSpendDown } from '../savings/spendDownService.js'
 import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../savings/savingsRecommendationService.js'
 import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarService.js'
 import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest } from '../analytics/creditSimulationService.js'
+import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory } from '../switching/switchingDetectorService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -160,8 +161,13 @@ export async function routeIntent(
     }
 
     case 'subscription_detection': {
-      const subscriptions = await analytics.getSubscriptions(userId)
-      structuredText = formatSubscriptions(subscriptions)
+      if (isSwitchingRequest(message)) {
+        const cat = extractSwitchingCategory(message)
+        structuredText = await checkSwitchingOpportunity(prisma, userId, cat)
+      } else {
+        const subscriptions = await analytics.getSubscriptions(userId)
+        structuredText = formatSubscriptions(subscriptions)
+      }
       break
     }
 
