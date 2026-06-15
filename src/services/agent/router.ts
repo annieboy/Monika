@@ -36,6 +36,7 @@ import { getCreditHealthReport, formatCreditHealthReport } from '../analytics/cr
 import { handleSpendDown } from '../savings/spendDownService.js'
 import { getSavingsRecommendations, isSavingsRecommendationRequest } from '../savings/savingsRecommendationService.js'
 import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarService.js'
+import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest } from '../analytics/creditSimulationService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -273,8 +274,13 @@ export async function routeIntent(
     }
 
     case 'credit_health': {
-      const creditReport = await getCreditHealthReport(prisma, userId)
-      structuredText = formatCreditHealthReport(creditReport)
+      if (isCreditSimulationRequest(message)) {
+        const scenario = parseCreditSimulation(message) ?? { type: 'generic' as const }
+        structuredText = await simulateCreditImpact(prisma, userId, scenario)
+      } else {
+        const creditReport = await getCreditHealthReport(prisma, userId)
+        structuredText = formatCreditHealthReport(creditReport)
+      }
       break
     }
 
