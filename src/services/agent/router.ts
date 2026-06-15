@@ -44,6 +44,7 @@ import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalS
 import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
 import { recommendRewardCard, isRewardCardRequest } from '../analytics/rewardCardService.js'
 import { checkPensionContributions, isPensionRequest } from '../analytics/pensionCheckerService.js'
+import { calculatePropertyAffordability, isPropertyAffordabilityRequest } from '../analytics/propertyAffordabilityService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -212,6 +213,10 @@ export async function routeIntent(
     }
 
     case 'affordability_question': {
+      if (isPropertyAffordabilityRequest(message)) {
+        structuredText = await calculatePropertyAffordability(prisma, userId, message)
+        break
+      }
       const profile = await analytics.getAffordabilityProfile(userId)
       structuredText = formatAffordability(profile, message)
       break
