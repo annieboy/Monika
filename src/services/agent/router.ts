@@ -39,6 +39,7 @@ import { getUpcomingBills, isBillCalendarRequest } from '../bills/billCalendarSe
 import { parseCreditSimulation, simulateCreditImpact, isCreditSimulationRequest } from '../analytics/creditSimulationService.js'
 import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory } from '../switching/switchingDetectorService.js'
 import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
+import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { generateOnboardingToken } from '../onboarding/token.js'
 import { logConsentEvent } from '../onboarding/audit.js'
@@ -153,6 +154,10 @@ export async function routeIntent(
 
   switch (intent) {
     case 'spending_analysis': {
+      if (isSpendingPersonalityRequest(message)) {
+        structuredText = await getSpendingPersonality(prisma, userId)
+        break
+      }
       const [categories, comparison] = await Promise.all([
         analytics.getSpendingByCategory(userId, fromDate, toDate, categoryFilter),
         analytics.getMonthlyComparison(userId, categoryFilter),
