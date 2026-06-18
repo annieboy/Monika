@@ -25,6 +25,11 @@ export type OpportunityJobName =
   | 'monthly-aggregation'
   | 'anomaly-scoring'
   | 'anomaly-alerts'
+  | 'price-change-alerts'
+  | 'low-balance-alerts'
+  | 'subscription-audit'
+  | 'debt-milestones'
+  | 'inactivity-nudge'
 
 export interface DetectOpportunitiesData {
   userId?: string   // if omitted, runs for all users
@@ -227,6 +232,61 @@ export async function scheduleRecurringJobs(): Promise<void> {
       name: 'spending-trend-alerts',
       data: {},
       opts: { priority: 3 },
+    },
+  )
+
+  // Daily at 09:30 UTC — detect recurring payment price increases
+  await queue.upsertJobScheduler(
+    'daily-price-change-alerts',
+    { pattern: '30 9 * * *', tz: 'UTC' },
+    {
+      name: 'price-change-alerts',
+      data: {},
+      opts: { priority: 2 },
+    },
+  )
+
+  // Daily at 07:30 UTC — warn users whose balance dropped below 7 days of spend
+  await queue.upsertJobScheduler(
+    'daily-low-balance-alerts',
+    { pattern: '30 7 * * *', tz: 'UTC' },
+    {
+      name: 'low-balance-alerts',
+      data: {},
+      opts: { priority: 1 },
+    },
+  )
+
+  // Monthly on the 1st at 09:00 UTC — subscription cost digest
+  await queue.upsertJobScheduler(
+    'monthly-subscription-audit',
+    { pattern: '0 9 1 * *', tz: 'UTC' },
+    {
+      name: 'subscription-audit',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Daily at 11:30 UTC — debt payoff milestone celebrations
+  await queue.upsertJobScheduler(
+    'daily-debt-milestones',
+    { pattern: '30 11 * * *', tz: 'UTC' },
+    {
+      name: 'debt-milestones',
+      data: {},
+      opts: { priority: 3 },
+    },
+  )
+
+  // Weekly on Monday at 10:00 UTC — re-engage users inactive for 30+ days
+  await queue.upsertJobScheduler(
+    'weekly-inactivity-nudge',
+    { pattern: '0 10 * * 1', tz: 'UTC' },
+    {
+      name: 'inactivity-nudge',
+      data: {},
+      opts: { priority: 4 },
     },
   )
 }
