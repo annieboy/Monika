@@ -180,7 +180,9 @@ describe('End-to-end agent flow', () => {
 
     const response = await routeIntent(intent, message, USER_B, prisma)
     expect(response).toMatch(/connect|bank|link/i)
-    expect(response).not.toMatch(/234/)
+    // Must not leak USER_A's grocery figure (£234.56). Match the decimal form —
+    // "234" alone collides with the random hex token in the connect link.
+    expect(response).not.toMatch(/234\.56/)
   })
 
   it('affordability response contains FCA disclaimer after validateAndFormatResponse', async () => {

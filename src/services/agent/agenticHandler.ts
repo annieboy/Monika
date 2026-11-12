@@ -13,7 +13,11 @@
 import type { PrismaClient } from '@prisma/client'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
+import { allowAgentCall } from './rateLimiter.js'
 import { logger } from '../../logger.js'
+
+const RATE_LIMIT_MESSAGE =
+  "You're asking a lot in a short burst — give me a minute to catch up, then try again. 🙂"
 
 const MODEL = 'claude-haiku-4-5-20251001'
 const MAX_TOOL_ITERATIONS = 6
@@ -280,7 +284,18 @@ export async function answerWithAgent(
   history: HistoryMessage[] = [],
 ): Promise<string | null> {
   if (!apiKey) return null
+
+  // Guardrail: cap paid LLM calls per user so chatter/loops can't run up cost.
+  if (!allowAgentCall(userId)) {
+    logger.warn({ userId }, 'Agent rate limit hit')
+    return RATE_LIMIT_MESSAGE
+  }
+
   const analytics = new TransactionAnalyticsService(prisma)
+  const startedAt = Date.now()
+  let inputTokens = 0
+  let outputTokens = 0
+  let toolCalls = 0
 
   // Build conversation: prior history (trimmed) + current question.
   const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
@@ -315,10 +330,15 @@ export async function answerWithAgent(
       const data = (await response.json()) as {
         content: AnthropicContentBlock[]
         stop_reason: string
+        usage?: { input_tokens?: number; output_tokens?: number }
       }
+
+      inputTokens += data.usage?.input_tokens ?? 0
+      outputTokens += data.usage?.output_tokens ?? 0
 
       if (data.stop_reason === 'tool_use') {
         const toolUses = data.content.filter(b => b.type === 'tool_use')
+        toolCalls += toolUses.length
         // Record the assistant's tool-use turn verbatim.
         messages.push({ role: 'assistant', content: data.content })
         // Execute each requested tool and feed results back.
@@ -337,8 +357,12 @@ export async function answerWithAgent(
         continue
       }
 
-      // Final text answer.
+      // Final text answer — log usage so Anthropic cost/latency is visible.
       const text = data.content.find(b => b.type === 'text')?.text?.trim()
+      logger.info(
+        { userId, inputTokens, outputTokens, toolCalls, latencyMs: Date.now() - startedAt },
+        'Agent answered',
+      )
       return text && text.length > 0 ? text : null
     }
     // Ran out of iterations — fall back.
