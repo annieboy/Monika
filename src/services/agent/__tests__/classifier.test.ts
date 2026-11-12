@@ -185,6 +185,28 @@ describe('classifyIntent — LLM fallback path', () => {
   })
 })
 
+describe('classifyIntent — past-tense spend vs safe-to-spend', () => {
+  it('"What did I spend this week?" → spending_analysis (not safe_to_spend)', async () => {
+    const r = await classifyIntent('What did I spend this week?', NO_KEY)
+    expect(r.intent).toBe('spending_analysis')
+  })
+
+  it('"How much did I spend this month?" → spending_analysis', async () => {
+    const r = await classifyIntent('How much did I spend this month?', NO_KEY)
+    expect(r.intent).toBe('spending_analysis')
+  })
+
+  it('"How much can I spend this weekend?" → safe_to_spend (forward-looking)', async () => {
+    const r = await classifyIntent('How much can I spend this weekend?', NO_KEY)
+    expect(r.intent).toBe('safe_to_spend')
+  })
+
+  it('"How much did I spend abroad?" → fx_transactions (not generic spend)', async () => {
+    const r = await classifyIntent('How much did I spend abroad?', NO_KEY)
+    expect(r.intent).toBe('fx_transactions')
+  })
+})
+
 describe('classifyIntent — new intents (Steps 14-27)', () => {
   // transaction_search
   it('transaction_search: "Show me my transactions at Tesco last month"', async () => {

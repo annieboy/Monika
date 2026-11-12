@@ -104,13 +104,25 @@ const RULES: Rule[] = [
     ],
   },
   {
+    // Past-tense spending questions MUST be caught before safe_to_spend,
+    // otherwise "what did I spend this week" matches "spend this week" and is
+    // wrongly treated as a safe-to-spend (forward-looking) query.
+    intent: 'spending_analysis',
+    patterns: [
+      // Past-tense spend questions, but NOT ones that belong to a more specific
+      // intent (abroad → fx, charity → charity, "at <merchant>" → merchant_query
+      // which is matched earlier in this list).
+      /^(?!.*\b(?:abroad|overseas|foreign|holiday|charit|donat|gift\s*aid)\b)(?=.*\b(?:what|how\s+much)\b).*\b(?:did\s+i\s+spend|have\s+i\s+spent|i\s+spent)\b/i,
+    ],
+  },
+  {
     intent: 'safe_to_spend',
     patterns: [
-      /safe\s+to\s+spend/i,
-      /how\s+much\s+can\s+i\s+spend/i,
-      /can\s+i\s+spend/i,
-      /spend\s+this\s+(weekend|week|month)/i,
-      /this\s+weekend/i,
+      /safe(?:ly)?\s+to\s+spend/i,
+      /safely\s+spend/i,
+      /how\s+much\s+can\s+i\s+(?:safely\s+)?spend/i,
+      /can\s+i\s+(?:safely\s+)?spend/i,
+      /(?:can|could|should|able\s+to|safe(?:ly)?\s+to)\s+(?:i\s+)?(?:safely\s+)?spend\s+this\s+(weekend|week|month)/i,
       /spare\s+(cash|money)/i,
       /left\s+to\s+spend/i,
       /spending\s+money/i,
