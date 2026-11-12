@@ -9,6 +9,7 @@
  */
 import { randomUUID } from 'crypto'
 import type { AccountType } from '@prisma/client'
+import { categoriseByMerchant } from '../../services/analytics/categorise.js'
 import type {
   OpenBankingProvider,
   ProviderAccount,
@@ -43,6 +44,7 @@ interface TLTransaction {
   currency: string
   transaction_type: string   // DEBIT | CREDIT
   transaction_category?: string
+  transaction_classification?: string[]
   merchant_name?: string
   merchant_category_code?: string
   running_balance?: { amount: number; currency: string }
@@ -316,7 +318,17 @@ export class TrueLayerProvider implements OpenBankingProvider {
   private mapTransaction(t: TLTransaction): ProviderTransaction {
     const isCredit = t.amount > 0 || t.transaction_type === 'CREDIT'
     const rawCategory = t.transaction_category ?? ''
-    const category = CATEGORY_MAP[rawCategory]
+    // Provider category first; fall back to classification array, then to a
+    // merchant-name inference so real debits don't end up uncategorised.
+    const providerCategory = CATEGORY_MAP[rawCategory]
+    const classification = Array.isArray(t.transaction_classification)
+      ? t.transaction_classification.join(' ')
+      : undefined
+    const category =
+      providerCategory ??
+      categoriseByMerchant(t.merchant_name) ??
+      categoriseByMerchant(classification) ??
+      categoriseByMerchant(t.description)
 
     return {
       providerTransactionId:

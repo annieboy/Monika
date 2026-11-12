@@ -81,10 +81,10 @@ describe('TransactionAnalyticsService.getSpendingByCategory', () => {
 
     const results = await svc.getSpendingByCategory(USER_ID, from, to)
 
-    // Ordered by highest total first (groupBy uses 'asc' on amount = most negative first)
-    expect(results[0]!.category).toBe('transport')
-    expect(results[0]!.total).toBeCloseTo(54.80)
-    expect(results[0]!.transactionCount).toBe(10)
+    // Ordered by highest total first (highest spend leads)
+    expect(results[0]!.category).toBe('groceries')
+    expect(results[0]!.total).toBeCloseTo(234.50)
+    expect(results[0]!.transactionCount).toBe(12)
     expect(results).toHaveLength(3)
   })
 
