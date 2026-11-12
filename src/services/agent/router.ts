@@ -90,6 +90,31 @@ async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<s
 const STATIC_ONBOARDING =
   "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or whether you can afford something. To get started, say \"connect my bank\"."
 
+/**
+ * Heuristic: does this message read as a follow-up to the previous turn rather
+ * than a self-contained request? Follow-ups start with a connective ("and…",
+ * "what about…") or are a short fragment that only makes sense with context
+ * ("last month?", "and at Tesco?"). Such messages are routed to the agent,
+ * which has the conversation history and can resolve the reference.
+ */
+export function isFollowUp(message: string): boolean {
+  const m = message.trim().toLowerCase().replace(/[?.!]+$/g, '')
+  // Explicit follow-up connectives.
+  if (/^(and\b|but\b|also\b|what about\b|how about\b|what of\b|what if\b|ok,?\s+(what|how)\s+about\b|and\s+(for|the|at|in|on|to|about)\b|same for\b|compared? to\b)/.test(m)) {
+    return true
+  }
+  // Short fragments that lean on prior context (a bare timeframe / "that one").
+  const words = m.split(/\s+/).filter(Boolean)
+  if (
+    words.length <= 4 &&
+    /\b(last|this|next|previous|yesterday|today|tomorrow|month|week|year|weekend|them|those|that|it|more|again|instead)\b/.test(m) &&
+    !/\b(balance|connect|link|help|afford|mortgage)\b/.test(m)
+  ) {
+    return true
+  }
+  return false
+}
+
 const STATIC_UNKNOWN =
   "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"Can I afford a £400k mortgage?\", \"How much can I safely spend this weekend?\", or \"What's my balance?\""
 
@@ -158,6 +183,15 @@ export async function routeIntent(
     // unrecognised message, show the help text; otherwise prompt to connect.
     if (intent === 'unknown') return STATIC_UNKNOWN
     return buildConnectLink(prisma, userId)
+  }
+
+  // Conversational follow-ups ("what about last month?", "and Tesco?") depend on
+  // the previous turns. The structured handlers are single-shot and context-blind,
+  // so route follow-ups to the agent, which carries the conversation + tools.
+  if (anthropicApiKey && history.length > 0 && isFollowUp(message)) {
+    const followUp = await answerWithAgent(message, userId, prisma, anthropicApiKey, history)
+    if (followUp) return followUp
+    // fall through to normal handling if the agent is unavailable
   }
 
   const { fromDate, toDate, categoryFilter } = extractQueryContext(message)
