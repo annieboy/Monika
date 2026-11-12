@@ -55,6 +55,9 @@ const configSchema = z.object({
 
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
+  // Comma-separated allowlist of phone numbers permitted to use Monika during
+  // private beta (e.g. "447700900000,447700900001"). Empty = everyone allowed.
+  ALLOWED_WHATSAPP_NUMBERS: z.string().default(''),
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
   WHATSAPP_VERIFY_TOKEN: z.string().default(''),
   WHATSAPP_APP_SECRET: z.string().default(''),

@@ -27,6 +27,8 @@ export interface ProviderTransaction {
   isSalary?: boolean | undefined
   isSubscription?: boolean | undefined
   subscriptionName?: string | undefined
+  isInternalTransfer?: boolean | undefined
+  isRefund?: boolean | undefined
 }
 
 export interface ProviderConsent {
@@ -60,6 +62,12 @@ export interface OpenBankingProvider {
     providerAccountId: string,
     from: Date,
     to: Date,
+  ): Promise<ProviderTransaction[]>
+
+  /** Fetch pending (un-cleared) transactions for one account. Optional. */
+  getPendingTransactions?(
+    consent: ProviderConsent,
+    providerAccountId: string,
   ): Promise<ProviderTransaction[]>
 
   /** Refresh an expiring access token. */

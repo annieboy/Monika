@@ -257,7 +257,29 @@ export class TrueLayerProvider implements OpenBankingProvider {
       `/data/v1/accounts/${encodeURIComponent(providerAccountId)}/transactions?${params.toString()}`,
       consent.accessToken,
     )
-    return results.map((t) => this.mapTransaction(t))
+    return results.map((t) => this.mapTransaction(t, 'settled'))
+  }
+
+  /**
+   * Pending (un-cleared) transactions — a card payment made minutes ago that
+   * hasn't settled yet. These are transient: a pending txn later appears in the
+   * settled feed (matched by normalised id / dedup hash). Fetched so "how much
+   * did I spend today?" reflects very recent purchases. Best-effort: a failure
+   * here never fails the overall sync.
+   */
+  async getPendingTransactions(
+    consent: ProviderConsent,
+    providerAccountId: string,
+  ): Promise<ProviderTransaction[]> {
+    try {
+      const results = await this.apiFetch<TLTransaction>(
+        `/data/v1/accounts/${encodeURIComponent(providerAccountId)}/transactions/pending`,
+        consent.accessToken,
+      )
+      return results.map((t) => this.mapTransaction(t, 'pending'))
+    } catch {
+      return []
+    }
   }
 
   // ── Private helpers ────────────────────────────────────────────────────
@@ -315,9 +337,24 @@ export class TrueLayerProvider implements OpenBankingProvider {
     }
   }
 
-  private mapTransaction(t: TLTransaction): ProviderTransaction {
+  private mapTransaction(t: TLTransaction, status: 'settled' | 'pending' = 'settled'): ProviderTransaction {
     const isCredit = t.amount > 0 || t.transaction_type === 'CREDIT'
     const rawCategory = t.transaction_category ?? ''
+    const desc = `${t.description ?? ''} ${t.merchant_name ?? ''}`
+
+    // Internal transfer: moving money between the user's own accounts is NOT
+    // spending. TrueLayer flags these as TRANSFER; also catch common wording.
+    const isInternalTransfer =
+      rawCategory === 'TRANSFER' ||
+      /\b(transfer|xfer|to\s+savings|from\s+savings|own\s+account|money\s+in|money\s+out|internal)\b/i.test(desc)
+
+    // Refund: a credit that looks like a merchant refund/return (not salary/income).
+    const isRefund =
+      isCredit &&
+      rawCategory !== 'SALARY' &&
+      rawCategory !== 'INCOME' &&
+      !isInternalTransfer &&
+      /\b(refund|reversal|returned|chargeback|credit\s+adjustment)\b/i.test(desc)
     // Provider category first; fall back to classification array, then to a
     // merchant-name inference so real debits don't end up uncategorised.
     const providerCategory = CATEGORY_MAP[rawCategory]
@@ -336,13 +373,15 @@ export class TrueLayerProvider implements OpenBankingProvider {
       amount: t.amount,
       currency: t.currency,
       transactionType: isCredit ? 'credit' : 'debit',
-      status: 'settled',
+      status,
       merchantName: t.merchant_name,
       merchantCategoryCode: t.merchant_category_code,
       transactionDate: new Date(t.timestamp),
       rawDescription: t.description,
       category: category ?? undefined,
       isSalary: rawCategory === 'SALARY' || rawCategory === 'INCOME',
+      isInternalTransfer,
+      isRefund,
     }
   }
 }
