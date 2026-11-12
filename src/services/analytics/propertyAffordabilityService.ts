@@ -15,18 +15,6 @@ import type { PrismaClient } from '@prisma/client'
 const fmt = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-interface AffordabilityResult {
-  grossAnnualIncome: number
-  maxBorrow4_5x: number
-  maxBorrow5_5x: number
-  depositAssumed: number
-  maxPropertyPrice: number
-  monthlyRepayment25yr: number
-  monthlyRepayment35yr: number
-  stressTestMonthly: number
-  debtToIncomeOk: boolean
-}
-
 // Monthly mortgage repayment using annuity formula
 function monthlyRepayment(principal: number, annualRate: number, years: number): number {
   const r = annualRate / 12

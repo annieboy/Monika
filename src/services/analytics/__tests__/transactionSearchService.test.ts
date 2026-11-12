@@ -182,4 +182,32 @@ describe('formatTransactionSearch', () => {
     const out = formatTransactionSearch([sample[0]!], {})
     expect(out).not.toMatch(/Total/)
   })
+
+  it('caps long lists at 15 rows and summarises the rest', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      id: `t${i}`, date: new Date('2026-06-10'), merchant: `Shop ${i}`,
+      category: 'shopping', amount: -10, description: null,
+    }))
+    const out = formatTransactionSearch(many, { merchantName: 'Shops' })
+    expect(out).toMatch(/…and 5 more/)
+    expect(out).toMatch(/across 20 payments/)
+    // Only 15 bullet rows shown
+    expect((out.match(/•/g) ?? []).length).toBe(15)
+  })
+})
+
+describe('parseTransactionSearch — today / merchant "to" / all', () => {
+  it('parses "today" to the start of the current day', () => {
+    const f = parseTransactionSearch('transactions today')
+    expect(f?.from?.getHours()).toBe(0)
+    expect(f?.from?.getDate()).toBe(new Date().getDate())
+  })
+  it('matches a merchant after "to" ("payments to Netflix")', () => {
+    const f = parseTransactionSearch('list all payments to Netflix')
+    expect(f?.merchantName?.toLowerCase()).toContain('netflix')
+  })
+  it('"all" raises the limit so the full list is fetched', () => {
+    const f = parseTransactionSearch('all my payments to Tesco')
+    expect(f?.limit).toBe(50)
+  })
 })

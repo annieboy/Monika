@@ -42,7 +42,7 @@ import { checkSwitchingOpportunity, isSwitchingRequest, extractSwitchingCategory
 import { getEmergencyFundStatus, isEmergencyFundRequest } from '../analytics/emergencyFundService.js'
 import { getSpendingPersonality, isSpendingPersonalityRequest } from '../analytics/spendingPersonalityService.js'
 import { suggestFinancialGoals, isGoalSuggestionRequest } from '../savings/goalSuggestionService.js'
-import { estimateTax, isTaxEstimatorRequest, parseSalaryFromMessage } from '../analytics/taxEstimatorService.js'
+import { estimateTax, isTaxEstimatorRequest } from '../analytics/taxEstimatorService.js'
 import { recommendRewardCard, isRewardCardRequest } from '../analytics/rewardCardService.js'
 import { checkPensionContributions, isPensionRequest } from '../analytics/pensionCheckerService.js'
 import { calculatePropertyAffordability, isPropertyAffordabilityRequest } from '../analytics/propertyAffordabilityService.js'
@@ -420,7 +420,11 @@ export async function routeIntent(
     }
   }
 
-  if (anthropicApiKey) {
+  // Intents whose output is an itemised list/table we want to show verbatim —
+  // LLM polishing would collapse the list into prose, so skip it for these.
+  const NO_POLISH_INTENTS = new Set<Intent>(['transaction_search', 'upcoming_bills'])
+
+  if (anthropicApiKey && !NO_POLISH_INTENTS.has(intent)) {
     const polished = await polishWithLlm(intent, structuredText, message, anthropicApiKey)
     // polishWithLlm returns structuredText unchanged on LLM failure — detect and track
     if (polished === structuredText) {

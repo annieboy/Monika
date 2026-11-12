@@ -11,6 +11,32 @@ interface Rule {
 
 const RULES: Rule[] = [
   {
+    // Transaction-list & past-payment phrasings. Must precede the subscription
+    // and mortgage rules, which would otherwise grab a merchant name (Netflix)
+    // or "mortgage" and send a list request to the wrong handler.
+    intent: 'transaction_search',
+    patterns: [
+      /when\s+did\s+i\s+(?:last\s+)?pay/i,
+      /(?:my\s+)?last\s+payment\s+(?:to|at|for)/i,
+      /when\s+was\s+my\s+last\s+payment/i,
+      /(?:list|show|find)\s+(?:all\s+|me\s+|my\s+)?(?:payments?|transactions?)\s+(?:to|at|for)/i,
+      /\ball\s+(?:my\s+)?(?:payments?|transactions?)\b/i,
+      /(?:^|\s)(?:payments?|transactions?)\s+(?:to|at|for)\s+[A-Za-z]/i,
+      /\btransactions?\s+(?:today|yesterday|this\s+week|this\s+month)\b/i,
+    ],
+  },
+  {
+    // Future-payment timing: "when is my mortgage due", "when's my next payment".
+    // Must precede the affordability rule (which grabs "mortgage").
+    intent: 'upcoming_bills',
+    patterns: [
+      /when\s+(?:is|'?s|are|will)\s+.*\b(?:due|coming\s+out|coming\s+up)\b/i,
+      /when\s+do\s+i\s+(?:next\s+)?pay/i,
+      /next\s+(?:payment|bill|direct\s*debit|standing\s*order)/i,
+      /when('?s| is)\s+my\s+\w+\s+(?:due|payment|bill)/i,
+    ],
+  },
+  {
     intent: 'subscription_detection',
     patterns: [
       /subscri/i,
@@ -263,12 +289,18 @@ const RULES: Rule[] = [
       /find\s+(my\s+)?transactions?/i,
       /list\s+(my\s+)?transactions?/i,
       /search\s+(my\s+)?transactions?/i,
-      /transactions?\s+(at|from|on)\s+/i,
+      /transactions?\s+(at|from|on|to|for)\s+/i,
       /what\s+did\s+i\s+(buy|purchase|pay\s+for)/i,
       /recent\s+transactions?/i,
       /show\s+(me\s+)?purchases?/i,
       /find\s+(my\s+)?[\w\s]*purchases?/i,
       /(?:recent|latest)\s+[\w\s]*purchases?/i,
+      // "transactions today", "my transactions this week", "transactions yesterday"
+      /\b(?:my\s+)?transactions?\s+(today|yesterday|this\s+week|this\s+month)\b/i,
+      /\b(?:what\s+(?:are|were)\s+)?(?:my\s+)?transactions?\s+(?:today|yesterday)\b/i,
+      // "payments to Netflix", "list all payments to X", "all payments at Tesco"
+      /\b(?:all\s+|list\s+(?:all\s+)?|show\s+(?:all\s+)?)?payments?\s+(?:to|at|for)\s+/i,
+      /\ball\s+(?:my\s+)?(?:transactions?|payments?)\b/i,
     ],
   },
   {

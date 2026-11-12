@@ -48,18 +48,11 @@ export async function checkPensionContributions(
   const threeMonthsAgo = new Date()
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
 
-  const [transactions, accounts] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { userId, transactionDate: { gte: threeMonthsAgo } },
-      select: { amount: true, category: true, rawDescription: true },
-    }),
-    prisma.account.findMany({
-      where: { userId },
-      select: { currentBalance: true },
-    }),
-  ])
+  const transactions = await prisma.transaction.findMany({
+    where: { userId, transactionDate: { gte: threeMonthsAgo } },
+    select: { amount: true, category: true, rawDescription: true },
+  })
 
-  const balance = accounts.reduce((s, a) => s + Number(a.currentBalance ?? 0), 0)
   const monthlyPension = detectPensionContributions(
     transactions.map(t => ({
       amount: Number(t.amount),
@@ -112,7 +105,6 @@ export async function checkPensionContributions(
       out += `⚠️ *Room to grow:* You're contributing ${pensionRate.toFixed(1)}% — above the 8% minimum, but below the recommended ${target}%.\n\n`
       out += `*To reach ${target}%:* increase by ${gap.toFixed(1)} percentage points (≈${fmt(extraMonthly)}/month).\n\n`
     } else {
-      const gapToMin = 8 - pensionRate
       out += `⚠️ *Below minimum:* You're contributing ${pensionRate.toFixed(1)}% — below the 8% auto-enrolment minimum.\n\n`
       out += `*Priority:* Check your workplace pension is active and claim your employer's full match first — it's free money.\n\n`
     }
