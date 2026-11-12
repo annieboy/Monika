@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Intent } from './intents.js'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
-import { extractQueryContext } from '../analytics/context.js'
+import { extractQueryContext, extractSpendSubject } from '../analytics/context.js'
 import {
   formatSpendingAnalysis,
   formatSubscriptions,
@@ -89,6 +89,57 @@ async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<s
 
 const STATIC_ONBOARDING =
   "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or whether you can afford something. To get started, say \"connect my bank\"."
+
+const fmtGbp = (n: number): string =>
+  `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * Deterministic merchant-spend answer for "how much did I spend on <merchant>".
+ * Finds the merchant's transactions and lists them with a total. If several
+ * distinct merchant names match, it asks which (numbered). No LLM, no "shall
+ * I dig in?" — the user asked, so we answer.
+ */
+async function handleMerchantSpend(
+  prisma: PrismaClient,
+  userId: string,
+  subject: string,
+  message: string,
+): Promise<string> {
+  const analytics = new TransactionAnalyticsService(prisma)
+  // Merchant lookups default to the current year when no timeframe is given, so
+  // we don't miss payments from earlier months.
+  const hasTimeframe = /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message)
+  const { fromDate, toDate } = hasTimeframe
+    ? extractQueryContext(message)
+    : { fromDate: new Date(new Date().getFullYear(), 0, 1), toDate: new Date() }
+
+  const merchants = await analytics.findMerchants(userId, subject, fromDate, toDate)
+
+  if (merchants.length === 0) {
+    return `I couldn't find any transactions for *${subject}* in that period. Try the name exactly as it appears on your statement, or a wider timeframe.`
+  }
+
+  // Several genuinely different merchant names → ask which one.
+  if (merchants.length > 1) {
+    let out = `I found a few that match *${subject}* — which did you mean?\n\n`
+    merchants.slice(0, 5).forEach((m, i) => {
+      out += `${i + 1}) *${m.merchant}* — ${fmtGbp(m.total)} (${m.transactionCount} payment${m.transactionCount === 1 ? '' : 's'})\n`
+    })
+    out += `\nReply with the number or the name.`
+    return out
+  }
+
+  // One merchant → list its transactions with a total.
+  const only = merchants[0]!
+  const detail = await analytics.getSpendingByMerchantName(userId, only.merchant, fromDate, toDate)
+  let out = `Here's what I found for *${only.merchant}*:\n\n`
+  for (const t of detail.transactions.slice(0, 15)) {
+    out += `• ${t.date} — ${t.merchant}: *${fmtGbp(t.amount)}*\n`
+  }
+  if (detail.transactions.length > 15) out += `…and ${detail.transactions.length - 15} more.\n`
+  out += `\n*Total: ${fmtGbp(detail.total)}* across ${detail.transactionCount} payment${detail.transactionCount === 1 ? '' : 's'}`
+  return out
+}
 
 /**
  * Heuristic: does this message read as a follow-up to the previous turn rather
@@ -192,6 +243,14 @@ export async function routeIntent(
     const followUp = await answerWithAgent(message, userId, prisma, anthropicApiKey, history)
     if (followUp) return followUp
     // fall through to normal handling if the agent is unavailable
+  }
+
+  // "how much did I spend on <X>": when <X> is a merchant/payee (not a known
+  // category), search for it and list the transactions directly — don't run a
+  // category breakdown or ask permission to "dig in".
+  const spendSubject = extractSpendSubject(message)
+  if (spendSubject && !spendSubject.isCategory) {
+    return handleMerchantSpend(prisma, userId, spendSubject.subject, message)
   }
 
   const { fromDate, toDate, categoryFilter } = extractQueryContext(message)

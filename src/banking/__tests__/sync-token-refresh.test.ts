@@ -59,9 +59,12 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
 function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
   return {
     account: {
-      upsert: vi.fn().mockImplementation(({ create }: { create: { providerAccountId: string } }) =>
-        Promise.resolve(makeAccount({ providerAccountId: create.providerAccountId })),
-      ),
+      findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockImplementation(({ data }: { data: { providerAccountId: string } }) =>
+          Promise.resolve(makeAccount({ providerAccountId: data.providerAccountId })),
+        ),
+        update: vi.fn().mockImplementation(() => Promise.resolve(makeAccount({}))),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     transaction: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -261,9 +264,12 @@ describe('runFullSync with transaction errors', () => {
   it('includes firstError in analytics event when a transaction fails', async () => {
     const prisma = makePrisma({
       account: {
-        upsert: vi.fn().mockImplementation(({ create }: { create: { providerAccountId: string } }) =>
-          Promise.resolve(makeAccount({ providerAccountId: create.providerAccountId })),
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockImplementation(({ data }: { data: { providerAccountId: string } }) =>
+          Promise.resolve(makeAccount({ providerAccountId: data.providerAccountId })),
         ),
+        update: vi.fn().mockImplementation(() => Promise.resolve(makeAccount({}))),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
       transaction: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -297,9 +303,12 @@ describe('runFullSync with transaction errors', () => {
   it('sets lastSyncStatus to partial when there are errors', async () => {
     const prisma = makePrisma({
       account: {
-        upsert: vi.fn().mockImplementation(({ create }: { create: { providerAccountId: string } }) =>
-          Promise.resolve(makeAccount({ providerAccountId: create.providerAccountId })),
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockImplementation(({ data }: { data: { providerAccountId: string } }) =>
+          Promise.resolve(makeAccount({ providerAccountId: data.providerAccountId })),
         ),
+        update: vi.fn().mockImplementation(() => Promise.resolve(makeAccount({}))),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
       transaction: {
         findFirst: vi.fn().mockResolvedValue(null),

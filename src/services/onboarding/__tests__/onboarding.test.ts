@@ -62,7 +62,10 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       update: vi.fn().mockResolvedValue({}),
     },
     account: {
-      upsert: vi.fn().mockResolvedValue({ id: 'acct-uuid', providerAccountId: 'mock-account-current' }),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: 'acct-uuid', providerAccountId: 'mock-account-current' }),
+      update: vi.fn().mockResolvedValue({ id: 'acct-uuid', providerAccountId: 'mock-account-current' }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     transaction: {
       findFirst: vi.fn().mockResolvedValue(null),

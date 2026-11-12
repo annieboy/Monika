@@ -5,7 +5,7 @@
  * calculations produce deterministic results.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { extractQueryContext } from '../context.js'
+import { extractQueryContext, extractSpendSubject } from '../context.js'
 
 const FROZEN = new Date('2024-06-15T14:00:00Z')
 
@@ -219,5 +219,22 @@ describe('extractQueryContext — merchant extraction', () => {
     const { fromDate } = extractQueryContext('how much did I spend on groceries')
     expect(fromDate.getDate()).toBe(1)
     expect(fromDate.getMonth()).toBe(5)
+  })
+})
+
+describe('extractSpendSubject', () => {
+  it('flags a merchant name (not a category)', () => {
+    expect(extractSpendSubject('how much did I spend on winners chapel')).toEqual({ subject: 'winners chapel', isCategory: false })
+    expect(extractSpendSubject('how much have I spent on winners chapel this year')).toEqual({ subject: 'winners chapel', isCategory: false })
+  })
+
+  it('flags known categories as categories', () => {
+    expect(extractSpendSubject('how much did I spend on groceries this month')?.isCategory).toBe(true)
+    expect(extractSpendSubject('what did I spend on transport')?.isCategory).toBe(true)
+  })
+
+  it('returns null when there is no "spend on X"', () => {
+    expect(extractSpendSubject("what's my balance?")).toBeNull()
+    expect(extractSpendSubject('how much did I spend this month')).toBeNull()
   })
 })
