@@ -14,6 +14,7 @@ import type { PrismaClient } from '@prisma/client'
 import { decrypt, encrypt } from '../../lib/crypto.js'
 import { config } from '../../config.js'
 import { logConsentEvent } from '../onboarding/audit.js'
+import { disconnectAllBanks } from '../banking/disconnectService.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,13 @@ function decryptField(enc: Uint8Array | Buffer | null | undefined): string | nul
 
 function isOptOut(msg: string): boolean {
   return /stop\s+(sending|messages|offers|notifications|tips)|unsubscribe|opt.?out/i.test(msg)
+}
+
+function isDisconnectRequest(msg: string): boolean {
+  // "disconnect", "disconnect my bank", "log off/out", "sign out", "unlink",
+  // "remove/revoke bank", "log me out". Excludes account/data deletion.
+  if (/delete|forgotten|gdpr/i.test(msg)) return false
+  return /\b(disconnect|unlink|revoke)\b|\blog\s*(off|out)\b|\bsign\s*out\b|\blog\s*me\s*out\b|\bremove\s+(my\s+)?bank\b|\bunlink\s+(my\s+)?bank\b/i.test(msg)
 }
 
 function isDeleteRequest(msg: string): boolean {
@@ -208,6 +216,22 @@ export async function handleAccountManagement(
   userId: string,
   message: string,
 ): Promise<string> {
+  // Disconnect / log off the bank connection (keeps the account & history).
+  if (isDisconnectRequest(message)) {
+    const { disconnected } = await disconnectAllBanks(prisma, userId)
+    if (disconnected === 0) {
+      return (
+        `You don't have a bank connected right now.\n\n` +
+        `Say *"connect my bank"* whenever you'd like to link one.`
+      )
+    }
+    return (
+      `✅ *Bank disconnected.* I've revoked access and stopped syncing your data.\n\n` +
+      `Your saved history stays, but I won't pull anything new until you reconnect.\n\n` +
+      `Whenever you're ready, just say *"connect my bank"* to link it again.`
+    )
+  }
+
   // Deletion confirmation takes priority — must match exactly
   if (isDeleteConfirm(message)) {
     return handleDeleteConfirm(prisma, userId)

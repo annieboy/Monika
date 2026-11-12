@@ -25,7 +25,8 @@ const MAX_TOOL_ITERATIONS = 6
 
 type Period =
   | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month'
-  | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'this_year' | 'all_time'
+  | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'this_year'
+  | 'this_financial_year' | 'all_time'
 
 function periodToRange(period: Period | undefined): { from: Date; to: Date; label: string } {
   const now = new Date()
@@ -51,6 +52,11 @@ function periodToRange(period: Period | undefined): { from: Date; to: Date; labe
       return { from: new Date(now.getTime() - 90 * 86_400_000), to: now, label: 'the last 90 days' }
     case 'this_year':
       return { from: new Date(y, 0, 1), to: now, label: 'this year' }
+    case 'this_financial_year': {
+      // UK tax year: 6 April to 5 April
+      const start = (m > 3 || (m === 3 && d >= 6)) ? new Date(y, 3, 6) : new Date(y - 1, 3, 6)
+      return { from: start, to: now, label: 'this financial year' }
+    }
     case 'all_time':
       return { from: new Date(2000, 0, 1), to: now, label: 'all time' }
     case 'this_month':
@@ -61,7 +67,8 @@ function periodToRange(period: Period | undefined): { from: Date; to: Date; labe
 
 const PERIOD_ENUM = [
   'today', 'yesterday', 'this_week', 'this_month', 'last_month',
-  'last_7_days', 'last_30_days', 'last_90_days', 'this_year', 'all_time',
+  'last_7_days', 'last_30_days', 'last_90_days', 'this_year',
+  'this_financial_year', 'all_time',
 ]
 
 interface Tool {
@@ -139,6 +146,16 @@ const TOOLS: Tool[] = [
     name: 'get_income',
     description: 'Get the user\'s detected monthly income (from salary/credits).',
     input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'get_cashflow_summary',
+    description:
+      'Totals over a period: money IN (all income/credits), money OUT (all spending/debits), the net, and how much of the "in" is salary/pay. Use for "total incoming/outgoing this financial year", "account summary" (earned vs spent), and "how much from salary". Internal transfers are excluded.',
+    input_schema: {
+      type: 'object',
+      properties: { period: { type: 'string', enum: PERIOD_ENUM, description: 'Defaults to this_financial_year.' } },
+      required: [],
+    },
   },
   {
     name: 'compare_spending',
@@ -241,6 +258,17 @@ async function runTool(
       const profile = await analytics.getAffordabilityProfile(userId)
       return JSON.stringify({ monthly_income: profile.monthlyIncome, disposable_income: profile.disposableIncome })
     }
+    case 'get_cashflow_summary': {
+      const { from, to, label } = periodToRange(period ?? 'this_financial_year')
+      const cf = await analytics.getCashflowSummary(userId, from, to)
+      return JSON.stringify({
+        period: label,
+        total_in: cf.totalIn,
+        total_out: cf.totalOut,
+        net: cf.net,
+        salary_total: cf.salaryTotal,
+      })
+    }
     case 'compare_spending': {
       const cmp = await analytics.getMonthlyComparison(userId, input['category'] as string | undefined)
       return JSON.stringify(cmp)
@@ -301,6 +329,7 @@ Handling common requests:
 - When the user has several accounts (especially same-type at one bank), name each distinctly — use its name and last-4, e.g. "Current ••1234: £500.00", "Current ••5678: £1,200.00" — don't merge them or make them ambiguous.
 - "last payment to <merchant>" / "when did I last pay <merchant>" → search_transactions for that merchant; report the MOST RECENT one (date + amount).
 - "when is <bill> due" / "upcoming payments" → get_upcoming_bills, then pick out the matching bill and give its due date (and note it's estimated from the usual payment cycle).
+- "total incoming/outgoing (this financial year)", "account summary" (earned vs spent), "how much from salary" → get_cashflow_summary (default period this_financial_year). Report money in, money out, net, and salary separately.
 - "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
 
 Style:
