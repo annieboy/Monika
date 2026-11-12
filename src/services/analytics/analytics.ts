@@ -122,7 +122,7 @@ export class TransactionAnalyticsService {
         userId,
         transactionDate: { gte: from, lte: to },
         amount: { lt: 0 },
-        isSalary: false,
+        isSalary: false, isInternalTransfer: false,
         ...(categoryFilter
           ? { category: { contains: categoryFilter, mode: 'insensitive' } }
           : {}),
@@ -162,7 +162,7 @@ export class TransactionAnalyticsService {
         userId,
         transactionDate: { gte: from, lte: to },
         amount: { lt: 0 },
-        isSalary: false,
+        isSalary: false, isInternalTransfer: false,
         merchantName: { not: null },
       },
       _sum: { amount: true },
@@ -190,7 +190,7 @@ export class TransactionAnalyticsService {
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
     const baseWhere = {
-      isSalary: false,
+      isSalary: false, isInternalTransfer: false,
       amount: { lt: 0 },
       ...(categoryFilter
         ? { category: { contains: categoryFilter, mode: 'insensitive' as const } }
@@ -266,7 +266,7 @@ export class TransactionAnalyticsService {
         userId,
         transactionDate: { gte: from, lte: to },
         amount: { lt: 0 },
-        isSalary: false,
+        isSalary: false, isInternalTransfer: false,
         category: { notIn: ['rent', 'transfer'] },
       },
       orderBy: { amount: 'asc' },
@@ -430,11 +430,11 @@ export class TransactionAnalyticsService {
     const [balances, thisMonthAgg, lastMonthAgg, topCats, subs, incomeAgg, recentTxns] = await Promise.all([
       this.getAccountBalances(userId),
       this.prisma.transaction.aggregate({
-        where: { userId, transactionDate: { gte: monthStart }, amount: { lt: 0 }, isSalary: false },
+        where: { userId, transactionDate: { gte: monthStart }, amount: { lt: 0 }, isSalary: false, isInternalTransfer: false },
         _sum: { amount: true },
       }),
       this.prisma.transaction.aggregate({
-        where: { userId, transactionDate: { gte: lastMonthStart, lte: lastMonthEnd }, amount: { lt: 0 }, isSalary: false },
+        where: { userId, transactionDate: { gte: lastMonthStart, lte: lastMonthEnd }, amount: { lt: 0 }, isSalary: false, isInternalTransfer: false },
         _sum: { amount: true },
       }),
       this.getSpendingByCategory(userId, monthStart, now),
@@ -501,7 +501,7 @@ export class TransactionAnalyticsService {
           userId,
           transactionDate: { gte: threeMonthsAgo },
           amount: { lt: 0 },
-          isSalary: false,
+          isSalary: false, isInternalTransfer: false,
           category: { in: ESSENTIAL_CATEGORIES },
         },
         _sum: { amount: true },
@@ -513,7 +513,7 @@ export class TransactionAnalyticsService {
       }),
       // All spend
       this.prisma.transaction.aggregate({
-        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { lt: 0 }, isSalary: false },
+        where: { userId, transactionDate: { gte: threeMonthsAgo }, amount: { lt: 0 }, isSalary: false, isInternalTransfer: false },
         _sum: { amount: true },
       }),
       this.prisma.account.findMany({

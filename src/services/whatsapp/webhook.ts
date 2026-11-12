@@ -8,6 +8,8 @@ import { handleOnboardingStep } from '../onboarding/onboardingFlow.js'
 import { getOrCreateSession, loadSessionHistory } from '../conversation/sessionService.js'
 import { CONSENT_PROMPT } from '../opportunity/opportunityMessageBuilder.js'
 import { config } from '../../config.js'
+import { logger } from '../../logger.js'
+import { isAllowedNumber } from './allowlist.js'
 
 // Intents that count as a real "data question" (not onboarding/unknown)
 const DATA_INTENTS = new Set([
@@ -45,6 +47,13 @@ export async function processInboundMessage(
   text: string,
   wabaId: string,
 ): Promise<ProcessedMessage | null> {
+  // Private-beta allowlist: if configured, silently ignore numbers not on it
+  // (no user row, no reply). Empty allowlist = open to everyone.
+  if (!isAllowedNumber(phone)) {
+    logger.info({ waMessageId }, 'Ignoring message from non-allowlisted number')
+    return null
+  }
+
   const phoneHash = hashPhoneNumber(phone, config.SECRET_KEY)
   const phoneEnc = encrypt(Buffer.from(phone, 'utf-8'), config.ENCRYPTION_KEY) as unknown as Uint8Array<ArrayBuffer>
 

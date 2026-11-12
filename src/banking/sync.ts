@@ -102,13 +102,19 @@ export async function syncTransactions(
   from: Date,
 ): Promise<{ imported: number; skipped: number; errors: string[] }> {
   const to = new Date()
-  const providerTxns = await provider.getTransactions(consent, account.providerAccountId, from, to)
+  const settledTxns = await provider.getTransactions(consent, account.providerAccountId, from, to)
+  // Pending transactions (optional per provider) so recent purchases show up.
+  const pendingTxns = provider.getPendingTransactions
+    ? await provider.getPendingTransactions(consent, account.providerAccountId)
+    : []
 
   let imported = 0
   let skipped = 0
   const errors: string[] = []
 
-  for (const pt of providerTxns) {
+  // Settled first, then pending — a pending txn that has since settled is then
+  // found as settled and not duplicated.
+  for (const pt of [...settledTxns, ...pendingTxns]) {
     try {
       const result = await upsertTransaction(prisma, account, pt)
       if (result === 'created') imported++
@@ -144,10 +150,20 @@ async function upsertTransaction(
         { accountId: account.id, dedupHash },
       ],
     },
-    select: { id: true },
+    select: { id: true, status: true },
   })
 
-  if (existing) return 'skipped'
+  if (existing) {
+    // Promote a previously-pending txn to settled when the cleared version
+    // arrives, so status stays accurate (no new row → no double count).
+    if (existing.status === 'pending' && pt.status === 'settled') {
+      await prisma.transaction.update({
+        where: { id: existing.id },
+        data: { status: 'settled', amount: new Decimal(amountStr), transactionDate: pt.transactionDate },
+      })
+    }
+    return 'skipped'
+  }
 
   await prisma.transaction.create({
     data: {
@@ -169,6 +185,8 @@ async function upsertTransaction(
       isSubscription: pt.isSubscription ?? false,
       subscriptionName: pt.subscriptionName ?? null,
       isRecurring: pt.isSubscription ?? false,
+      isInternalTransfer: pt.isInternalTransfer ?? false,
+      isRefund: pt.isRefund ?? false,
       dedupHash,
       categoryMethod: pt.category ? 'rule' : null,
       categoryConfidence: pt.category ? new Decimal('0.900') : null,

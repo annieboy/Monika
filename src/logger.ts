@@ -19,7 +19,9 @@ import { config } from './config.js'
 const isDevelopment = config.NODE_ENV === 'development'
 
 export const logger = pino({
-  level: config.LOG_LEVEL,
+  // Default to 'info' so the logger stays valid even when a test mocks `config`
+  // without LOG_LEVEL (pino rejects an undefined level).
+  level: config.LOG_LEVEL ?? 'info',
 
   // Rename msg → message for log aggregator compatibility
   messageKey: 'message',
