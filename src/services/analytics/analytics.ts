@@ -55,6 +55,7 @@ export interface AccountBalance {
   accountType: string
   currentBalance: number
   availableBalance: number | null
+  last4?: string | null
 }
 
 export interface AffordabilityProfile {
@@ -364,6 +365,44 @@ export class TransactionAnalyticsService {
   }
 
   /**
+   * Finds distinct merchant names matching a free-text query (for "how much on
+   * <merchant>"). Returns one row per distinct cleaned merchant name with its
+   * total and count, so the caller can disambiguate when several names match
+   * (e.g. "Winners Chapel Intl" vs "Winners Chapel London").
+   */
+  async findMerchants(
+    userId: string,
+    query: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<Array<{ merchant: string; total: number; transactionCount: number }>> {
+    const rows = await this.prisma.transaction.groupBy({
+      by: ['merchantNameClean'],
+      where: {
+        userId,
+        amount: { lt: 0 },
+        isInternalTransfer: false,
+        ...(from || to ? { transactionDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+        OR: [
+          { merchantNameClean: { contains: query, mode: 'insensitive' } },
+          { merchantName: { contains: query, mode: 'insensitive' } },
+          { rawDescription: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+      orderBy: { _sum: { amount: 'asc' } },
+    })
+    return rows
+      .filter((r): r is typeof r & { merchantNameClean: string } => r.merchantNameClean !== null)
+      .map((r) => ({
+        merchant: r.merchantNameClean,
+        total: Math.abs((r._sum.amount ?? new Decimal(0)).toNumber()),
+        transactionCount: r._count.id,
+      }))
+  }
+
+  /**
    * Flexible transaction search for the agentic handler: filter by text,
    * date window, and absolute amount range. Returns debits by default.
    */
@@ -618,6 +657,7 @@ export class TransactionAnalyticsService {
         accountType: true,
         currentBalance: true,
         availableBalance: true,
+        accountLast4: true,
         isPrimary: true,
       },
       orderBy: { isPrimary: 'desc' },
@@ -628,6 +668,7 @@ export class TransactionAnalyticsService {
       accountType: a.accountType,
       currentBalance: (a.currentBalance ?? new Decimal(0)).toNumber(),
       availableBalance: a.availableBalance?.toNumber() ?? null,
+      last4: a.accountLast4,
     }))
   }
 }

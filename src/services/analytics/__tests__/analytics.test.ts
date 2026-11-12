@@ -266,6 +266,38 @@ describe('TransactionAnalyticsService.getUnusualSpending', () => {
 
 // ── getAccountBalances ─────────────────────────────────────────────────────
 
+describe('TransactionAnalyticsService.findMerchants', () => {
+  it('returns one row per distinct merchant name for disambiguation', async () => {
+    const prisma = makePrisma({
+      transaction: {
+        groupBy: vi.fn().mockResolvedValue([
+          { merchantNameClean: 'Winners Chapel Intl', _sum: { amount: new Decimal('-120') }, _count: { id: 3 } },
+          { merchantNameClean: 'Winners Chapel London', _sum: { amount: new Decimal('-40') }, _count: { id: 1 } },
+        ]),
+      },
+    })
+    const svc = new TransactionAnalyticsService(prisma)
+    const matches = await svc.findMerchants(USER_ID, 'winners chapel')
+    expect(matches).toHaveLength(2)
+    expect(matches[0]).toMatchObject({ merchant: 'Winners Chapel Intl', total: 120, transactionCount: 3 })
+    expect(matches.map(m => m.merchant)).toContain('Winners Chapel London')
+  })
+
+  it('returns a single match when only one merchant name matches', async () => {
+    const prisma = makePrisma({
+      transaction: {
+        groupBy: vi.fn().mockResolvedValue([
+          { merchantNameClean: 'Costa Coffee', _sum: { amount: new Decimal('-55.50') }, _count: { id: 11 } },
+        ]),
+      },
+    })
+    const svc = new TransactionAnalyticsService(prisma)
+    const matches = await svc.findMerchants(USER_ID, 'costa')
+    expect(matches).toHaveLength(1)
+    expect(matches[0]).toMatchObject({ merchant: 'Costa Coffee', total: 55.5 })
+  })
+})
+
 describe('TransactionAnalyticsService.getAccountBalances', () => {
   it('returns balances for all active accounts', async () => {
     const prisma = makePrisma({

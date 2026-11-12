@@ -106,6 +106,19 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'find_merchants',
+    description:
+      'Look up which merchant names in the user\'s data match a search term, each with its total and count. Use this FIRST for "how much on/at <name>" when <name> is not a standard category (e.g. a shop, church, person, or brand). If it returns several distinct names, ask the user which one they mean before answering.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The merchant/payee text to search for, e.g. "winners chapel".' },
+        period: { type: 'string', enum: PERIOD_ENUM },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'get_merchant_spend',
     description: 'Get total spent at a specific merchant over a period, with the matching transactions.',
     input_schema: {
@@ -178,6 +191,7 @@ async function runTool(
         accounts: balances.map(b => ({
           name: b.displayName ?? b.accountType,
           type: b.accountType,
+          last4: b.last4, // distinguishes same-type accounts, e.g. "••1234"
           balance: b.currentBalance,
           available: b.availableBalance,
         })),
@@ -202,6 +216,11 @@ async function runTool(
       const limit = Math.min((input['limit'] as number | undefined) ?? 15, 40)
       const result = await analytics.searchTransactions(userId, { from, to, merchant, minAmount: minA, maxAmount: maxA, limit })
       return JSON.stringify({ count: result.length, transactions: result })
+    }
+    case 'find_merchants': {
+      const { from, to, label } = periodToRange(period ?? 'this_year')
+      const merchants = await analytics.findMerchants(userId, (input['query'] as string) ?? '', from, to)
+      return JSON.stringify({ period: label, query: input['query'], matches: merchants })
     }
     case 'get_merchant_spend': {
       const { from, to, label } = periodToRange(period ?? 'last_90_days')
@@ -275,7 +294,11 @@ You answer questions about the user's real bank data by calling the provided too
 Use the conversation so far for context — treat short follow-ups as continuations, not new topics. If the user just asked about groceries this month and then says "what about last month?" or "and at Tesco?", carry the earlier subject over and only change what they changed.
 
 Handling common requests:
-- "how much on <category/merchant> (this month/…)" → get_spending with a category, or get_merchant_spend for a named merchant (e.g. Uber Eats, Tesco). Map everyday terms: "fast food"/"takeaways"→restaurants, "petrol"/"travel"→transport, "bills"→bills.
+- "how much on/at <X> (this year/month/…)": decide if <X> is a spending CATEGORY or a MERCHANT/payee.
+  • Everyday category words (groceries, transport, "fast food"/"takeaways"→restaurants, "petrol"/"travel"→transport, bills, subscriptions, shopping) → get_spending with that category.
+  • A specific name — a shop, brand, church, person, or anything not in that category list (e.g. "Winners Chapel", "Costa", "Halifax") → treat it as a MERCHANT: call find_merchants first. If it returns exactly one match, answer with that total. If it returns SEVERAL distinct names, DO NOT guess — reply asking the user which they mean, numbered, e.g. "I found a few — which did you mean? 1) Winners Chapel Intl  2) Winners Chapel London". If it returns none, say you couldn't find that merchant and don't substitute a category total.
+- Never invent a comparison, period, or figure the user didn't ask for. Only call compare_spending when they explicitly ask to compare two periods. Answer the exact question asked.
+- When the user has several accounts (especially same-type at one bank), name each distinctly — use its name and last-4, e.g. "Current ••1234: £500.00", "Current ••5678: £1,200.00" — don't merge them or make them ambiguous.
 - "last payment to <merchant>" / "when did I last pay <merchant>" → search_transactions for that merchant; report the MOST RECENT one (date + amount).
 - "when is <bill> due" / "upcoming payments" → get_upcoming_bills, then pick out the matching bill and give its due date (and note it's estimated from the usual payment cycle).
 - "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
