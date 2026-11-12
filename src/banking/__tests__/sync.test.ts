@@ -33,9 +33,14 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
 function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
   return {
     account: {
-      upsert: vi.fn().mockImplementation(({ create }: { create: { providerAccountId: string } }) =>
-        Promise.resolve(makeAccount({ providerAccountId: create.providerAccountId })),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockImplementation(({ data }: { data: { providerAccountId: string } }) =>
+        Promise.resolve(makeAccount({ providerAccountId: data.providerAccountId })),
       ),
+      update: vi.fn().mockImplementation(({ data }: { data: { providerAccountId?: string } }) =>
+        Promise.resolve(makeAccount({ providerAccountId: data.providerAccountId ?? 'acc' })),
+      ),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     transaction: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -55,37 +60,53 @@ const provider = new MockOpenBankingProvider()
 // ── syncAccounts ───────────────────────────────────────────────────────────
 
 describe('syncAccounts', () => {
-  it('upserts one row per provider account', async () => {
+  it('creates one row per provider account (none existing)', async () => {
     const prisma = makePrisma()
     const accounts = await syncAccounts(prisma, 'conn-id', 'user-id', MOCK_CONSENT, provider)
 
     expect(accounts).toHaveLength(2)
-    expect(prisma.account.upsert).toHaveBeenCalledTimes(2)
+    expect(prisma.account.create).toHaveBeenCalledTimes(2)
   })
 
   it('creates a current account with correct type', async () => {
     const prisma = makePrisma()
     await syncAccounts(prisma, 'conn-id', 'user-id', MOCK_CONSENT, provider)
 
-    const calls = (prisma.account.upsert as ReturnType<typeof vi.fn>).mock.calls as Array<
-      [{ create: { accountType: string; displayName: string; providerAccountId: string } }]
+    const calls = (prisma.account.create as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [{ data: { accountType: string; displayName: string; providerAccountId: string } }]
     >
-    const currentCall = calls.find((c) => c[0].create.providerAccountId === 'mock-account-current')
+    const currentCall = calls.find((c) => c[0].data.providerAccountId === 'mock-account-current')
     expect(currentCall).toBeDefined()
-    expect(currentCall![0].create.accountType).toBe('current')
-    expect(currentCall![0].create.displayName).toBe('Personal Current Account')
+    expect(currentCall![0].data.accountType).toBe('current')
+    expect(currentCall![0].data.displayName).toBe('Personal Current Account')
   })
 
   it('creates a savings account with correct type', async () => {
     const prisma = makePrisma()
     await syncAccounts(prisma, 'conn-id', 'user-id', MOCK_CONSENT, provider)
 
-    const calls = (prisma.account.upsert as ReturnType<typeof vi.fn>).mock.calls as Array<
-      [{ create: { accountType: string; providerAccountId: string } }]
+    const calls = (prisma.account.create as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [{ data: { accountType: string; providerAccountId: string } }]
     >
-    const savingsCall = calls.find((c) => c[0].create.providerAccountId === 'mock-account-savings')
+    const savingsCall = calls.find((c) => c[0].data.providerAccountId === 'mock-account-savings')
     expect(savingsCall).toBeDefined()
-    expect(savingsCall![0].create.accountType).toBe('savings')
+    expect(savingsCall![0].data.accountType).toBe('savings')
+  })
+
+  it('reuses the existing row and deletes duplicates on reconnect', async () => {
+    const prisma = makePrisma({
+      account: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'acc-old', accountLast4: '1234' }, { id: 'acc-dupe', accountLast4: null }]),
+        update: vi.fn().mockImplementation(() => Promise.resolve(makeAccount({}))),
+        create: vi.fn(),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    })
+    await syncAccounts(prisma, 'conn-new', 'user-id', MOCK_CONSENT, provider)
+    // Reuses (update), never creates, and removes the duplicate row
+    expect(prisma.account.update).toHaveBeenCalled()
+    expect(prisma.account.create).not.toHaveBeenCalled()
+    expect(prisma.account.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['acc-dupe'] } } })
   })
 })
 

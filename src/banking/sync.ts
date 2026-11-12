@@ -65,27 +65,54 @@ export async function syncAccounts(
 
   const upserted: Account[] = []
   for (const pa of providerAccounts) {
-    const account = await prisma.account.upsert({
-      where: { connectionId_providerAccountId: { connectionId, providerAccountId: pa.providerAccountId } },
-      create: {
-        connectionId,
-        userId,
-        providerAccountId: pa.providerAccountId,
-        accountType: pa.accountType,
-        displayName: pa.displayName,
-        currency: pa.currency,
-        currentBalance: pa.currentBalance,
-        availableBalance: pa.availableBalance ?? null,
-        accountLast4: pa.accountLast4 ?? null,
-        balanceUpdatedAt: new Date(),
-      },
-      update: {
-        displayName: pa.displayName,
-        currentBalance: pa.currentBalance,
-        availableBalance: pa.availableBalance ?? null,
-        balanceUpdatedAt: new Date(),
-      },
+    // Reuse the user's existing row for this bank account (identified by the
+    // bank's own account id), rather than keying on the connection. Without
+    // this, reconnecting a bank creates a brand-new account and re-imports
+    // every transaction, producing duplicates. We keep the oldest row (it holds
+    // the original transactions, so per-account dedup still catches the re-sync)
+    // and delete any duplicate rows left by earlier reconnects — their
+    // duplicated transactions cascade away.
+    const existingRows = await prisma.account.findMany({
+      where: { userId, providerAccountId: pa.providerAccountId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, accountLast4: true },
     })
+
+    let account: Account
+    const canonical = existingRows[0]
+    if (canonical) {
+      account = await prisma.account.update({
+        where: { id: canonical.id },
+        data: {
+          connectionId,
+          isActive: true,
+          displayName: pa.displayName,
+          currentBalance: pa.currentBalance,
+          availableBalance: pa.availableBalance ?? null,
+          accountLast4: pa.accountLast4 ?? canonical.accountLast4,
+          balanceUpdatedAt: new Date(),
+        },
+      })
+      const duplicateIds = existingRows.slice(1).map((r) => r.id)
+      if (duplicateIds.length > 0) {
+        await prisma.account.deleteMany({ where: { id: { in: duplicateIds } } })
+      }
+    } else {
+      account = await prisma.account.create({
+        data: {
+          connectionId,
+          userId,
+          providerAccountId: pa.providerAccountId,
+          accountType: pa.accountType,
+          displayName: pa.displayName,
+          currency: pa.currency,
+          currentBalance: pa.currentBalance,
+          availableBalance: pa.availableBalance ?? null,
+          accountLast4: pa.accountLast4 ?? null,
+          balanceUpdatedAt: new Date(),
+        },
+      })
+    }
     upserted.push(account)
   }
 
