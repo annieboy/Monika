@@ -125,20 +125,27 @@ export class TransactionAnalyticsService {
         isSalary: false,
         ...(categoryFilter
           ? { category: { contains: categoryFilter, mode: 'insensitive' } }
-          : { category: { not: null } }),
+          : {}),
       },
       _sum: { amount: true },
       _count: { id: true },
       orderBy: { _sum: { amount: 'asc' } },  // most negative first = highest spend
     })
 
-    return results
-      .filter((r): r is typeof r & { category: string } => r.category !== null)
-      .map((r) => ({
-        category: r.category,
-        total: Math.abs((r._sum.amount ?? new Decimal(0)).toNumber()),
-        transactionCount: r._count.id,
-      }))
+    // Uncategorised spend is folded into an "other" bucket rather than dropped,
+    // so totals always reflect real spending even before enrichment runs.
+    const merged = new Map<string, { total: number; count: number }>()
+    for (const r of results) {
+      const key = r.category ?? 'other'
+      const existing = merged.get(key) ?? { total: 0, count: 0 }
+      existing.total += Math.abs((r._sum.amount ?? new Decimal(0)).toNumber())
+      existing.count += r._count.id
+      merged.set(key, existing)
+    }
+
+    return Array.from(merged.entries())
+      .map(([category, v]) => ({ category, total: v.total, transactionCount: v.count }))
+      .sort((a, b) => b.total - a.total)
   }
 
   /**
@@ -354,6 +361,59 @@ export class TransactionAnalyticsService {
         category: r.category,
       })),
     }
+  }
+
+  /**
+   * Flexible transaction search for the agentic handler: filter by text,
+   * date window, and absolute amount range. Returns debits by default.
+   */
+  async searchTransactions(
+    userId: string,
+    opts: {
+      from: Date
+      to: Date
+      merchant?: string | undefined
+      minAmount?: number | undefined
+      maxAmount?: number | undefined
+      limit?: number | undefined
+    },
+  ): Promise<Array<{ date: string; merchant: string; amount: number; category: string | null; description: string | null }>> {
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        transactionDate: { gte: opts.from, lte: opts.to },
+        ...(opts.merchant
+          ? {
+              OR: [
+                { merchantName: { contains: opts.merchant, mode: 'insensitive' } },
+                { rawDescription: { contains: opts.merchant, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: Math.min(opts.limit ?? 15, 40),
+      select: { merchantName: true, amount: true, transactionDate: true, category: true, rawDescription: true },
+    })
+
+    return rows
+      .map((r) => {
+        const abs = Math.abs(r.amount.toNumber())
+        return {
+          date: r.transactionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+          merchant: r.merchantName ?? r.rawDescription ?? 'Unknown',
+          amount: r.amount.toNumber(),
+          category: r.category,
+          description: r.rawDescription,
+          _abs: abs,
+        }
+      })
+      .filter((r) => {
+        if (opts.minAmount !== undefined && r._abs < opts.minAmount) return false
+        if (opts.maxAmount !== undefined && r._abs > opts.maxAmount) return false
+        return true
+      })
+      .map(({ _abs, ...rest }) => { void _abs; return rest })
   }
 
   /**

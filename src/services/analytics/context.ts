@@ -94,6 +94,15 @@ export function extractQueryContext(message: string): QueryContext {
     yesterday.setDate(yesterday.getDate() - 1)
     fromDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
     toDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59)
+  } else if (/\btoday\b|so\s+far\s+today|\bthis\s+morning\b/i.test(message)) {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    toDate = now
+  } else if (/this\s+week|past\s+7\s+days/i.test(message)) {
+    // Start of the current week (Monday)
+    const day = now.getDay() // 0 = Sun
+    const daysSinceMonday = (day + 6) % 7
+    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday)
+    toDate = now
   } else {
     // Default: current month
     fromDate = new Date(now.getFullYear(), now.getMonth(), 1)

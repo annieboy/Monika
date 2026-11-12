@@ -101,6 +101,11 @@ function makeMockPrisma(): PrismaClient {
       // Simulate existing prefs so consent prompt is not appended in route tests
       findUnique: vi.fn().mockResolvedValue({ opportunitiesConsent: true }),
     },
+    // No active bank connection → 'unknown' greeting resolves to the help text
+    // rather than falling through to the (network-dependent) agentic handler.
+    bankConnection: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   } as unknown as PrismaClient
 }
 

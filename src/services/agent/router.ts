@@ -16,6 +16,7 @@ import {
   polishWithLlm,
 } from '../analytics/formatter.js'
 import { answerWithAI } from './conversational.js'
+import { answerWithAgent } from './agenticHandler.js'
 import { parseGoalFromMessage, createGoal, listGoals } from '../savings/savingsGoalService.js'
 import { handleAccountManagement } from '../account/accountManagementService.js'
 import { handleBudget } from '../budget/budgetService.js'
@@ -149,10 +150,13 @@ export async function routeIntent(
     return STATIC_ONBOARDING
   }
 
-  if (intent === 'unknown') return STATIC_UNKNOWN
-
   // ── Data-driven intents ─────────────────────────────────────────────────
+  // Note: 'unknown' is no longer a dead end — it falls through to the agentic
+  // handler in the default case, which can answer almost any data question.
   if (!(await analytics.hasActiveBankConnection(userId))) {
+    // Without a bank connection there's no data to reason over. For a genuinely
+    // unrecognised message, show the help text; otherwise prompt to connect.
+    if (intent === 'unknown') return STATIC_UNKNOWN
     return buildConnectLink(prisma, userId)
   }
 
@@ -402,8 +406,12 @@ export async function routeIntent(
     }
 
     default: {
-      // Conversational AI fallback — answers anything using full financial context
+      // Agentic fallback — Claude calls live data tools to answer almost anything
+      // ("spending at Costa last Tuesday?", "biggest expense this year?", etc.).
       if (anthropicApiKey) {
+        const agentAnswer = await answerWithAgent(message, userId, prisma, anthropicApiKey, history)
+        if (agentAnswer) return agentAnswer
+        // Fall back to the lighter snapshot handler if the agent is unavailable.
         const snapshot = await analytics.getFinancialSnapshot(userId)
         const aiAnswer = await answerWithAI(message, snapshot, anthropicApiKey, history)
         if (aiAnswer) return aiAnswer

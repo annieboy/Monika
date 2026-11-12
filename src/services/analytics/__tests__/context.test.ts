@@ -197,4 +197,27 @@ describe('extractQueryContext — merchant extraction', () => {
   it('returns undefined when no merchant pattern matches', () => {
     expect(extractQueryContext('groceries this month').merchantFilter).toBeUndefined()
   })
+
+  // ── "today" / "this week" (regression for the spend-today bug) ───────────────
+  it('scopes "today" to the start of the current day, not the month', () => {
+    const { fromDate, toDate } = extractQueryContext('how much did I spend today')
+    // FROZEN is 2024-06-15; start of today is the 15th, not the 1st
+    expect(fromDate.getDate()).toBe(15)
+    expect(fromDate.getMonth()).toBe(5) // June
+    expect(fromDate.getHours()).toBe(0)
+    expect(toDate.getTime()).toBe(FROZEN.getTime())
+  })
+
+  it('scopes "this week" to the most recent Monday', () => {
+    // 2024-06-15 is a Saturday → Monday is the 10th
+    const { fromDate } = extractQueryContext('what have I spent this week')
+    expect(fromDate.getDate()).toBe(10)
+    expect(fromDate.getMonth()).toBe(5)
+  })
+
+  it('still scopes default (no timeframe) to start of month', () => {
+    const { fromDate } = extractQueryContext('how much did I spend on groceries')
+    expect(fromDate.getDate()).toBe(1)
+    expect(fromDate.getMonth()).toBe(5)
+  })
 })
