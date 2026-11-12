@@ -306,3 +306,27 @@ describe('classifyIntent — new intents (Steps 14-27)', () => {
     expect(r.intent).toBe('spending_forecast')
   })
 })
+
+describe('classifyIntent — transaction list & payment timing', () => {
+  it('"transactions today" → transaction_search', async () => {
+    expect((await classifyIntent('transactions today', NO_KEY)).intent).toBe('transaction_search')
+  })
+  it('"my transactions this week" → transaction_search', async () => {
+    expect((await classifyIntent('my transactions this week', NO_KEY)).intent).toBe('transaction_search')
+  })
+  it('"list all payments to Netflix" → transaction_search', async () => {
+    expect((await classifyIntent('list all payments to Netflix', NO_KEY)).intent).toBe('transaction_search')
+  })
+  it('"last payment to Halifax" → transaction_search', async () => {
+    expect((await classifyIntent('last payment to Halifax', NO_KEY)).intent).toBe('transaction_search')
+  })
+  it('"when did I last pay Netflix" → transaction_search (not subscription)', async () => {
+    expect((await classifyIntent('when did I last pay Netflix', NO_KEY)).intent).toBe('transaction_search')
+  })
+  it('"when is my mortgage due" → upcoming_bills (not affordability)', async () => {
+    expect((await classifyIntent('when is my mortgage due', NO_KEY)).intent).toBe('upcoming_bills')
+  })
+  it('"when is my next payment" → upcoming_bills', async () => {
+    expect((await classifyIntent('when is my next payment', NO_KEY)).intent).toBe('upcoming_bills')
+  })
+})

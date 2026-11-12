@@ -12,6 +12,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
+import { getUpcomingBills } from '../bills/billCalendarService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { allowAgentCall } from './rateLimiter.js'
 import { logger } from '../../logger.js'
@@ -145,6 +146,12 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'get_upcoming_bills',
+    description:
+      'List upcoming bills, direct debits and standing orders due soon, with their amounts and due dates. Use for "upcoming payments", "what\'s due", and "when is my <X> due?" (then pick out the matching one).',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
     name: 'get_financial_overview',
     description:
       'Get a broad snapshot: balances, this/last month spend, top categories, subscriptions, income, savings rate. Use for open-ended "how am I doing" questions.',
@@ -160,6 +167,7 @@ async function runTool(
   input: Record<string, unknown>,
   userId: string,
   analytics: TransactionAnalyticsService,
+  prisma: PrismaClient,
 ): Promise<string> {
   const period = input['period'] as Period | undefined
   switch (name) {
@@ -231,6 +239,10 @@ async function runTool(
         })),
       })
     }
+    case 'get_upcoming_bills': {
+      const text = await getUpcomingBills(prisma, userId)
+      return JSON.stringify({ upcoming_bills_summary: text })
+    }
     case 'get_financial_overview': {
       const snap = await analytics.getFinancialSnapshot(userId)
       return JSON.stringify({
@@ -260,9 +272,18 @@ const SYSTEM_PROMPT = `You are Monika, a warm, sharp UK personal finance assista
 
 You answer questions about the user's real bank data by calling the provided tools. Always call a tool to get real figures — never invent numbers. Call multiple tools if needed to fully answer.
 
+Use the conversation so far for context — treat short follow-ups as continuations, not new topics. If the user just asked about groceries this month and then says "what about last month?" or "and at Tesco?", carry the earlier subject over and only change what they changed.
+
+Handling common requests:
+- "how much on <category/merchant> (this month/…)" → get_spending with a category, or get_merchant_spend for a named merchant (e.g. Uber Eats, Tesco). Map everyday terms: "fast food"/"takeaways"→restaurants, "petrol"/"travel"→transport, "bills"→bills.
+- "last payment to <merchant>" / "when did I last pay <merchant>" → search_transactions for that merchant; report the MOST RECENT one (date + amount).
+- "when is <bill> due" / "upcoming payments" → get_upcoming_bills, then pick out the matching bill and give its due date (and note it's estimated from the usual payment cycle).
+- "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
+
 Style:
 - British English, £ currency, format as £X,XXX.XX
 - Concise and friendly — WhatsApp length, max ~8 short lines; use *bold* (single asterisks) for key figures, and bullet points where helpful
+- When the user asks to see, list, or find transactions/payments (e.g. "transactions today", "all payments to Netflix"), LIST them as bullets, one per line: "• <date> — <merchant>: *£amount*", then a final "*Total: £X* across N payments" line. If there are more than ~15, show the most recent 15 and add "…and N more." Don't collapse a list request into a single sentence.
 - Be specific: give the actual numbers from the tools
 - If the data genuinely has nothing (e.g. no transactions in that window), say so plainly and suggest a nearby timeframe
 - You are read-only: never offer to move money or make payments
@@ -299,7 +320,7 @@ export async function answerWithAgent(
 
   // Build conversation: prior history (trimmed) + current question.
   const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
-  for (const h of history.slice(-6)) {
+  for (const h of history.slice(-8)) {
     messages.push({ role: h.role, content: h.content })
   }
   messages.push({ role: 'user', content: userMessage })
@@ -346,7 +367,7 @@ export async function answerWithAgent(
         for (const tu of toolUses) {
           let result: string
           try {
-            result = await runTool(tu.name ?? '', tu.input ?? {}, userId, analytics)
+            result = await runTool(tu.name ?? '', tu.input ?? {}, userId, analytics, prisma)
           } catch (err) {
             logger.error({ err, tool: tu.name }, 'Agent tool execution failed')
             result = JSON.stringify({ error: 'tool failed' })

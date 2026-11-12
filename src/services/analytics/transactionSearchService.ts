@@ -35,15 +35,17 @@ export interface TransactionSearchResult {
 // ── NLP filter extraction ────────────────────────────────────────────────────
 
 export function parseTransactionSearch(message: string): TransactionSearchFilters | null {
-  const filters: TransactionSearchFilters = { limit: 10 }
+  // "all"/"every" payments → list more and let the formatter summarise if long.
+  const wantsAll = /\b(all|every|list\s+all|show\s+all)\b/i.test(message)
+  const filters: TransactionSearchFilters = { limit: wantsAll ? 50 : 10 }
   let hasFilter = false
 
-  // Merchant: "at Tesco", "from Amazon", "on Deliveroo"
-  const merchantMatch = message.match(/(?:at|from|on)\s+([A-Za-z0-9&' ]+?)(?:\s+(?:last|this|in|over|more|since|before|\?|$))/i)
-  if (merchantMatch?.[1]) {
-    const term = merchantMatch[1].trim()
+  // Merchant: "at Tesco", "from Amazon", "on Deliveroo", "to Netflix", "with Uber"
+  const merchantMatch = message.match(/(?:at|from|on|to|with)\s+([A-Za-z0-9&' ]+?)(?:\s+(?:last|this|in|over|more|since|before|\?|$))|(?:payments?|transactions?)\s+(?:to|at|for|from)\s+([A-Za-z0-9&' ]+?)(?:\s+(?:last|this|in|over|more|since|before|\?|$)|$)/i)
+  if (merchantMatch) {
+    const term = (merchantMatch[1] ?? merchantMatch[2] ?? '').trim()
     // Exclude date/time words that look like merchants
-    if (!/^(last|this|week|month|year|january|february|march|april|may|june|july|august|september|october|november|december)$/i.test(term)) {
+    if (term && !/^(last|this|week|month|year|today|yesterday|january|february|march|april|may|june|july|august|september|october|november|december)$/i.test(term)) {
       filters.merchantName = term
       hasFilter = true
     }
@@ -58,7 +60,21 @@ export function parseTransactionSearch(message: string): TransactionSearchFilter
 
   // Date ranges
   const now = new Date()
-  if (/last\s+week/i.test(message)) {
+  if (/\btoday\b|so\s+far\s+today|this\s+morning/i.test(message)) {
+    filters.from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    filters.to = now
+    hasFilter = true
+  } else if (/yesterday/i.test(message)) {
+    const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+    filters.from = y
+    filters.to = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999)
+    hasFilter = true
+  } else if (/this\s+week/i.test(message)) {
+    const daysSinceMonday = (now.getDay() + 6) % 7
+    filters.from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday)
+    filters.to = now
+    hasFilter = true
+  } else if (/last\s+week/i.test(message)) {
     filters.from = new Date(now.getTime() - 7 * 86_400_000)
     filters.to = now
     hasFilter = true
@@ -202,17 +218,23 @@ export function formatTransactionSearch(
   }
 
   const total = results.reduce((s, r) => s + r.amount, 0)
+  const MAX_ROWS = 15
   let out = `🔍 *Found ${results.length} transaction${results.length === 1 ? '' : 's'}*`
   if (filters.merchantName) out += ` at *${filters.merchantName}*`
   out += `:\n\n`
 
-  for (const r of results) {
+  // Long lists: show the most recent MAX_ROWS, then summarise the rest.
+  const shown = results.slice(0, MAX_ROWS)
+  for (const r of shown) {
     const label = r.merchant ?? r.description ?? r.category ?? 'Unknown'
     out += `• ${fmtDate(r.date)} — ${label}: *${fmtAmt(r.amount)}*\n`
   }
+  if (results.length > MAX_ROWS) {
+    out += `…and ${results.length - MAX_ROWS} more.\n`
+  }
 
   if (results.length > 1) {
-    out += `\n*Total: ${fmtAmt(total)}*`
+    out += `\n*Total: ${fmtAmt(total)}* across ${results.length} payment${results.length === 1 ? '' : 's'}`
   }
 
   return out.trim()

@@ -75,7 +75,6 @@ export async function estimateTax(
   prisma: PrismaClient,
   userId: string,
 ): Promise<string> {
-  const currentYear = new Date().getFullYear()
   // UK tax year starts 6 April — use previous 12 months of income transactions
   const twelveMonthsAgo = new Date()
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
