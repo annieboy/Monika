@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 import type { Intent } from './intents.js'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
 import { extractQueryContext, extractSpendSubject } from '../analytics/context.js'
+import { refreshUserData } from '../sync/refreshService.js'
 import {
   formatSpendingAnalysis,
   formatSubscriptions,
@@ -89,6 +90,21 @@ async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<s
 
 const STATIC_ONBOARDING =
   "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or whether you can afford something. To get started, say \"connect my bank\"."
+
+/**
+ * Does this message ask Monika to pull fresh data from the bank now?
+ * "refresh", "update my account", "sync my data", "up to date", "check now"…
+ */
+export function isRefreshRequest(message: string): boolean {
+  const m = message.trim().toLowerCase()
+  return (
+    /\brefresh\b|\bre-?sync\b|\bresync\b/.test(m) ||
+    /\b(update|updated|sync|pull|reload|refetch)\s+(my\s+)?(account|accounts|data|balance|balances|transactions?|info)\b/.test(m) ||
+    /\b(up\s*to\s*date|latest)\s+(account|accounts|data|balance|balances|info|transactions?)\b/.test(m) ||
+    /\b(get|pull|fetch)\s+(the\s+)?latest\b/.test(m) ||
+    /\bcheck\s+(now|again|for\s+new)\b/.test(m)
+  )
+}
 
 const fmtGbp = (n: number): string =>
   `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -224,6 +240,22 @@ export async function routeIntent(
       return buildConnectLink(prisma, userId)
     }
     return STATIC_ONBOARDING
+  }
+
+  // On-demand refresh: pull the latest data from the bank now, so a recent
+  // withdrawal/payment shows up without waiting for the scheduled sync.
+  if (isRefreshRequest(message)) {
+    const result = await refreshUserData(prisma, userId)
+    if (result.connections === 0) {
+      return buildConnectLink(prisma, userId)
+    }
+    const balances = await analytics.getAccountBalances(userId)
+    const total = balances.reduce((s, b) => s + b.currentBalance, 0)
+    return (
+      `🔄 *Updated.* I've pulled the latest from your bank.\n\n` +
+      `*Current balance:* ${fmtGbp(total)}\n\n` +
+      `Ask me anything — your data's now up to date.`
+    )
   }
 
   // ── Data-driven intents ─────────────────────────────────────────────────
