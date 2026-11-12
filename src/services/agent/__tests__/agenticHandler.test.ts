@@ -36,6 +36,15 @@ describe('periodToRange', () => {
     expect(from.getTime()).toBe(FROZEN.getTime() - 7 * 86_400_000)
   })
 
+  it('this_financial_year starts on 6 April (UK tax year)', () => {
+    // FROZEN is 2024-06-15 → tax year started 6 Apr 2024
+    const { from, label } = periodToRange('this_financial_year')
+    expect(from.getMonth()).toBe(3) // April
+    expect(from.getDate()).toBe(6)
+    expect(from.getFullYear()).toBe(2024)
+    expect(label).toBe('this financial year')
+  })
+
   it('defaults to this_month when period is undefined', () => {
     const { from, label } = periodToRange(undefined)
     expect(from.getDate()).toBe(1)

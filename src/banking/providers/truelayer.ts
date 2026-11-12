@@ -379,7 +379,11 @@ export class TrueLayerProvider implements OpenBankingProvider {
       transactionDate: new Date(t.timestamp),
       rawDescription: t.description,
       category: category ?? undefined,
-      isSalary: rawCategory === 'SALARY' || rawCategory === 'INCOME',
+      // Salary: provider category, or a credit whose description looks like pay.
+      isSalary:
+        rawCategory === 'SALARY' ||
+        rawCategory === 'INCOME' ||
+        (isCredit && !isInternalTransfer && /\b(salary|payroll|wages?|paye|net\s*pay|monthly\s*pay)\b/i.test(desc)),
       isInternalTransfer,
       isRefund,
     }

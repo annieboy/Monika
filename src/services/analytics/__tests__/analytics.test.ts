@@ -266,6 +266,23 @@ describe('TransactionAnalyticsService.getUnusualSpending', () => {
 
 // ── getAccountBalances ─────────────────────────────────────────────────────
 
+describe('TransactionAnalyticsService.getCashflowSummary', () => {
+  it('returns money in, out, net and salary', async () => {
+    const aggregate = vi.fn()
+      // call order: in (amount gt 0), out (amount lt 0), salary (OR)
+      .mockResolvedValueOnce({ _sum: { amount: new Decimal('5000') } })
+      .mockResolvedValueOnce({ _sum: { amount: new Decimal('-3200') } })
+      .mockResolvedValueOnce({ _sum: { amount: new Decimal('4200') } })
+    const prisma = makePrisma({ transaction: { aggregate } })
+    const svc = new TransactionAnalyticsService(prisma)
+    const cf = await svc.getCashflowSummary(USER_ID, new Date('2026-04-06'), new Date('2026-11-12'))
+    expect(cf.totalIn).toBe(5000)
+    expect(cf.totalOut).toBe(3200) // absolute value of debits
+    expect(cf.net).toBe(1800)
+    expect(cf.salaryTotal).toBe(4200)
+  })
+})
+
 describe('TransactionAnalyticsService.findMerchants', () => {
   it('returns one row per distinct merchant name for disambiguation', async () => {
     const prisma = makePrisma({

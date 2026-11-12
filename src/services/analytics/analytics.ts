@@ -365,6 +365,48 @@ export class TransactionAnalyticsService {
   }
 
   /**
+   * Cash-flow summary over a window: total money in (credits), total out
+   * (debits), net, and how much of the "in" is salary/pay. Internal transfers
+   * between the user's own accounts are excluded from both sides.
+   */
+  async getCashflowSummary(
+    userId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ totalIn: number; totalOut: number; net: number; salaryTotal: number }> {
+    const window = { gte: from, lte: to }
+    const [inAgg, outAgg, salaryAgg] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: window, amount: { gt: 0 }, isInternalTransfer: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { userId, transactionDate: window, amount: { lt: 0 }, isInternalTransfer: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          userId,
+          transactionDate: window,
+          amount: { gt: 0 },
+          isInternalTransfer: false,
+          OR: [
+            { isSalary: true },
+            { rawDescription: { contains: 'salary', mode: 'insensitive' } },
+            { rawDescription: { contains: 'payroll', mode: 'insensitive' } },
+            { rawDescription: { contains: 'wages', mode: 'insensitive' } },
+          ],
+        },
+        _sum: { amount: true },
+      }),
+    ])
+    const totalIn = (inAgg._sum.amount ?? new Decimal(0)).toNumber()
+    const totalOut = Math.abs((outAgg._sum.amount ?? new Decimal(0)).toNumber())
+    const salaryTotal = (salaryAgg._sum.amount ?? new Decimal(0)).toNumber()
+    return { totalIn, totalOut, net: totalIn - totalOut, salaryTotal }
+  }
+
+  /**
    * Finds distinct merchant names matching a free-text query (for "how much on
    * <merchant>"). Returns one row per distinct cleaned merchant name with its
    * total and count, so the caller can disambiguate when several names match
