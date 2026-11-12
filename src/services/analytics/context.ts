@@ -46,6 +46,27 @@ const MERCHANT_PATTERNS: Array<[RegExp, string]> = [
   [/\bjust\s+eat\b/i, 'just eat'],
 ]
 
+const KNOWN_CATEGORY_WORDS =
+  /^(bills?|utilities|groceries|grocery|food|supermarket|transport|travel|shopping|clothes|clothing|subscriptions?|streaming|entertainment|health|pharmacy|rent|mortgage|coffee|savings?|insurance|charity|donations?|dining|eating\s*out|restaurants?|takeaway|takeaways|fast\s*food|petrol|fuel|drinks?|drinking|alcohol)$/i
+
+/**
+ * For "how much did I spend ON <X>" questions: pulls out <X> and says whether
+ * it's a known spending category or should be treated as a merchant/payee.
+ * This is what lets "spend on groceries" do a category breakdown while "spend
+ * on Winners Chapel" searches for the merchant.
+ */
+export function extractSpendSubject(message: string): { subject: string; isCategory: boolean } | null {
+  const m = message.match(
+    /\b(?:spend|spent|spending)\s+(?:on|at|to|with)\s+([a-z0-9&'. ]+?)(?:\s+(?:this|last|in|over|since|before|during|for|per)\b|[?.!]|$)/i,
+  )
+  const subject = m?.[1]?.trim()
+  if (!subject) return null
+  const isCategory =
+    KNOWN_CATEGORY_WORDS.test(subject) ||
+    CATEGORY_PATTERNS.some(([pattern]) => pattern.test(subject))
+  return { subject, isCategory }
+}
+
 export function extractQueryContext(message: string): QueryContext {
   const now = new Date()
 
