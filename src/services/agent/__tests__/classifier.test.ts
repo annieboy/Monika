@@ -330,3 +330,15 @@ describe('classifyIntent — transaction list & payment timing', () => {
     expect((await classifyIntent('when is my next payment', NO_KEY)).intent).toBe('upcoming_bills')
   })
 })
+
+describe('classifyIntent — disconnect / log off', () => {
+  it('"disconnect my bank" → account_management', async () => {
+    expect((await classifyIntent('disconnect my bank', NO_KEY)).intent).toBe('account_management')
+  })
+  it('"log off" → account_management', async () => {
+    expect((await classifyIntent('log off', NO_KEY)).intent).toBe('account_management')
+  })
+  it('"unlink my bank account" → account_management', async () => {
+    expect((await classifyIntent('unlink my bank account', NO_KEY)).intent).toBe('account_management')
+  })
+})
