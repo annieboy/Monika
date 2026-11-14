@@ -15,7 +15,13 @@ import type { ProviderConsent } from '../../banking/types.js'
 
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 hours
 
-export function startSyncScheduler(prisma: PrismaClient): NodeJS.Timeout {
+export function startSyncScheduler(prisma: PrismaClient): NodeJS.Timeout | null {
+  // Operational kill switch — don't even create the interval when disabled.
+  if (!config.BACKGROUND_JOBS_ENABLED) {
+    logger.warn('Sync scheduler not started — BACKGROUND_JOBS_ENABLED=false')
+    return null
+  }
+
   const interval = setInterval(() => {
     runScheduledSync(prisma).catch((err: unknown) => {
       logger.error({ err }, 'Scheduled sync failed')
@@ -30,6 +36,7 @@ export function startSyncScheduler(prisma: PrismaClient): NodeJS.Timeout {
 }
 
 async function runScheduledSync(prisma: PrismaClient): Promise<void> {
+  if (!config.BACKGROUND_JOBS_ENABLED) return
   if (!config.TRUELAYER_CLIENT_ID || !config.TRUELAYER_CLIENT_SECRET) return
 
   const connections = await prisma.bankConnection.findMany({
