@@ -485,3 +485,20 @@ describe('TransactionAnalyticsService.getUncategorisedMerchants', () => {
     expect(await svc.getUncategorisedMerchants(USER_ID, new Date(), new Date())).toEqual([])
   })
 })
+
+// ── searchSpendByText ───────────────────────────────────────────────────────
+
+describe('TransactionAnalyticsService.searchSpendByText', () => {
+  it('finds spend by description when the merchant name is null, labelled by description', async () => {
+    const rows = [
+      { merchantName: null, merchantNameClean: null, cleanDescription: null, rawDescription: 'WINNERS CHAPEL INTL LONDON', amount: new Decimal('-30'), transactionDate: new Date('2026-11-02'), category: 'charity' },
+      { merchantName: null, merchantNameClean: null, cleanDescription: null, rawDescription: 'WINNERS CHAPEL INTL LONDON', amount: new Decimal('-20'), transactionDate: new Date('2026-10-05'), category: 'charity' },
+    ]
+    const prisma = makePrisma({ transaction: { findMany: vi.fn().mockResolvedValue(rows) } })
+    const svc = new TransactionAnalyticsService(prisma)
+    const r = await svc.searchSpendByText(USER_ID, 'winners chapel', new Date('2026-01-01'), new Date('2026-12-31'))
+    expect(r.transactionCount).toBe(2)
+    expect(r.total).toBe(50)
+    expect(r.transactions[0]!.merchant).toContain('WINNERS CHAPEL')
+  })
+})

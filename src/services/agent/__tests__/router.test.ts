@@ -395,3 +395,26 @@ describe('routeIntent — empty structured result retries via the agent', () => 
     expect(out.toLowerCase()).toContain('no spending found')
   })
 })
+
+// ── Merchant spend finds payees with no clean merchant name ──────────────────
+
+describe('routeIntent — merchant spend via description match', () => {
+  it('answers "how much to winners chapel" when only the description matches', async () => {
+    const winners = {
+      merchantName: null, merchantNameClean: null, cleanDescription: null,
+      rawDescription: 'WINNERS CHAPEL INTL', amount: new Decimal('-30'),
+      transactionDate: new Date('2026-11-02'), category: 'charity',
+    }
+    const prisma = makePrisma({
+      transaction: {
+        groupBy: vi.fn().mockResolvedValue([]),          // no distinct NAMED merchant
+        findMany: vi.fn().mockResolvedValue([winners]),  // description match
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
+    })
+    const out = await routeIntent('spending_analysis', 'How much was spent to winners chapel?', USER_ID, prisma)
+    expect(out.toLowerCase()).toContain('winners chapel')
+    expect(out).toContain('£30.00')
+    expect(out.toLowerCase()).not.toContain("couldn't find")
+  })
+})

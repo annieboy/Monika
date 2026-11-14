@@ -150,46 +150,49 @@ async function handleMerchantSpend(
     ? extractQueryContext(message)
     : { fromDate: yearStart, toDate: now }
 
-  // Always try the merchant first — even for words that double as categories
-  // (uber→transport, tesco→groceries), the user named a specific thing.
-  const merchants = await analytics.findMerchants(userId, subject, fromDate, toDate)
-
-  if (merchants.length === 0) {
-    // Nothing in the asked window. Widen to this year so we can say where the
-    // spending actually is, rather than a flat "couldn't find".
-    if (hasTimeframe) {
-      const wider = await analytics.findMerchants(userId, subject, yearStart, now)
-      if (wider.length > 0) {
-        const widerTotal = wider.reduce((s, m) => s + m.total, 0)
-        const names = wider.length === 1 ? `*${wider[0]!.merchant}*` : `${wider.length} matching merchants`
-        return `Nothing for *${subject}* in that period. But you've spent *${fmtGbp(widerTotal)}* at ${names} so far this year — want the breakdown?`
-      }
-    }
-    // A pure category word with no merchant match → let the category handler run.
-    if (isCategory) return null
-    return `I couldn't find any transactions for *${subject}*. Try the name exactly as it appears on your statement.`
-  }
-
-  // Several genuinely different merchant names → ask which one.
-  if (merchants.length > 1) {
+  // Distinct NAMED merchants matching the subject — used only to offer a
+  // "which did you mean?" choice when there are genuinely several (e.g. two
+  // different Halifax accounts). Payees with no clean merchant name don't
+  // appear here, so they can't trigger a spurious disambiguation.
+  const named = await analytics.findMerchants(userId, subject, fromDate, toDate)
+  if (named.length > 1) {
     let out = `I found a few that match *${subject}* — which did you mean?\n\n`
-    merchants.slice(0, 5).forEach((m, i) => {
+    named.slice(0, 5).forEach((m, i) => {
       out += `${i + 1}) *${m.merchant}* — ${fmtGbp(m.total)} (${m.transactionCount} payment${m.transactionCount === 1 ? '' : 's'})\n`
     })
     out += `\nReply with the number or the name.`
     return out
   }
 
-  // One merchant → list its transactions with a total.
-  const only = merchants[0]!
-  const detail = await analytics.getSpendingByMerchantName(userId, only.merchant, fromDate, toDate)
-  let out = `Here's what I found for *${only.merchant}*:\n\n`
-  for (const t of detail.transactions.slice(0, 15)) {
-    out += `• ${t.date} — ${t.merchant}: *${fmtGbp(t.amount)}*\n`
+  // A pure category word (groceries, transport) with no specific named merchant
+  // isn't a payee — let the category breakdown handler take it.
+  if (isCategory && named.length === 0) return null
+
+  const displayName = named.length === 1 ? named[0]!.merchant : subject
+
+  // Sum everything matching the text across merchant name AND description, so a
+  // payee with no clean merchant name (e.g. a church shown only in the
+  // statement line) is still found.
+  const match = await analytics.searchSpendByText(userId, subject, fromDate, toDate)
+  if (match.transactionCount > 0) {
+    let out = `You've spent *${fmtGbp(match.total)}* on *${displayName}* across ${match.transactionCount} payment${match.transactionCount === 1 ? '' : 's'}:\n\n`
+    for (const t of match.transactions.slice(0, 15)) {
+      out += `• ${t.date}: *${fmtGbp(t.amount)}*\n`
+    }
+    if (match.transactions.length > 15) out += `…and ${match.transactions.length - 15} more.\n`
+    return out.trim()
   }
-  if (detail.transactions.length > 15) out += `…and ${detail.transactions.length - 15} more.\n`
-  out += `\n*Total: ${fmtGbp(detail.total)}* across ${detail.transactionCount} payment${detail.transactionCount === 1 ? '' : 's'}`
-  return out
+
+  // Nothing in the asked window — widen to this year before giving up.
+  if (hasTimeframe) {
+    const wider = await analytics.searchSpendByText(userId, subject, yearStart, now)
+    if (wider.transactionCount > 0) {
+      return `Nothing for *${subject}* in that period. But you've spent *${fmtGbp(wider.total)}* on it so far this year (${wider.transactionCount} payment${wider.transactionCount === 1 ? '' : 's'}) — want the breakdown?`
+    }
+  }
+  // A pure category word with no merchant match → let the category handler run.
+  if (isCategory) return null
+  return `I couldn't find any transactions for *${subject}*. Try the name exactly as it appears on your statement.`
 }
 
 /**
