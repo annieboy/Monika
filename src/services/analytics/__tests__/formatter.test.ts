@@ -379,7 +379,7 @@ describe('buildFormattingPrompt', () => {
 
   it('instructs to keep all numbers exactly as shown', () => {
     const prompt = buildFormattingPrompt('spending', 'data', 'test')
-    expect(prompt).toContain('do not change any figures')
+    expect(prompt).toContain('Keep every number EXACTLY as shown')
   })
 
   it('instructs British English', () => {
