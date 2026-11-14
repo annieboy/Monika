@@ -331,6 +331,18 @@ describe('classifyIntent — transaction list & payment timing', () => {
   })
 })
 
+describe('classifyIntent — ownership lookups vs affordability', () => {
+  it('"Do I have a mortgage?" → unknown (factual lookup, goes to agent)', async () => {
+    expect((await classifyIntent('Do I have a mortgage?', NO_KEY)).intent).toBe('unknown')
+  })
+  it('"do I owe anything?" → unknown', async () => {
+    expect((await classifyIntent('do I owe anything?', NO_KEY)).intent).toBe('unknown')
+  })
+  it('"can I afford a mortgage?" → affordability_question (unchanged)', async () => {
+    expect((await classifyIntent('can I afford a mortgage?', NO_KEY)).intent).toBe('affordability_question')
+  })
+})
+
 describe('classifyIntent — disconnect / log off', () => {
   it('"disconnect my bank" → account_management', async () => {
     expect((await classifyIntent('disconnect my bank', NO_KEY)).intent).toBe('account_management')

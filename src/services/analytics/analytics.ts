@@ -365,6 +365,45 @@ export class TransactionAnalyticsService {
   }
 
   /**
+   * Money coming IN from a specific payer (credits matching the name), e.g.
+   * "how much do I earn from PayStream". Not limited to salary-flagged rows.
+   */
+  async getIncomeFromPayer(
+    userId: string,
+    payer: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; transactionCount: number; transactions: RecentTransaction[] }> {
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        transactionDate: { gte: from, lte: to },
+        amount: { gt: 0 },
+        isInternalTransfer: false,
+        OR: [
+          { merchantName: { contains: payer, mode: 'insensitive' } },
+          { merchantNameClean: { contains: payer, mode: 'insensitive' } },
+          { rawDescription: { contains: payer, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: 30,
+      select: { merchantName: true, amount: true, transactionDate: true, category: true, rawDescription: true },
+    })
+    const total = rows.reduce((s, r) => s + r.amount.toNumber(), 0)
+    return {
+      total,
+      transactionCount: rows.length,
+      transactions: rows.map((r) => ({
+        date: r.transactionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        merchant: r.merchantName ?? r.rawDescription ?? payer,
+        amount: r.amount.toNumber(),
+        category: r.category,
+      })),
+    }
+  }
+
+  /**
    * Cash-flow summary over a window: total money in (credits), total out
    * (debits), net, and how much of the "in" is salary/pay. Internal transfers
    * between the user's own accounts are excluded from both sides.
@@ -436,7 +475,7 @@ export class TransactionAnalyticsService {
       orderBy: { _sum: { amount: 'asc' } },
     })
     return rows
-      .filter((r): r is typeof r & { merchantNameClean: string } => r.merchantNameClean !== null)
+      .filter((r): r is typeof r & { merchantNameClean: string } => typeof r.merchantNameClean === 'string' && r.merchantNameClean.length > 0)
       .map((r) => ({
         merchant: r.merchantNameClean,
         total: Math.abs((r._sum.amount ?? new Decimal(0)).toNumber()),

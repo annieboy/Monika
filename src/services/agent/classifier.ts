@@ -11,6 +11,20 @@ interface Rule {
 
 const RULES: Rule[] = [
   {
+    // Factual ownership/existence questions ("do I have a mortgage?", "do I
+    // owe anything?"). These are lookups, NOT affordability calcs — route to the
+    // agent (via 'unknown'), which checks accounts and transactions. Must precede
+    // the affordability rule, which would otherwise grab "mortgage"/"loan".
+    intent: 'unknown',
+    patterns: [
+      /\bdo\s+i\s+(?:have|own|got|hold)\b[^?]*\b(?:mortgage|loan|overdraft|savings?|isa|pension|credit\s*card|debt|car\s+loan|student\s+loan)\b/i,
+      /\bdo\s+i\s+owe\b/i,
+      /\bhave\s+i\s+got\b[^?]*\b(?:mortgage|loan|overdraft|savings?|isa|pension|credit\s*card|debt)\b/i,
+      /\bis\s+there\s+(?:a|an|any)\b[^?]*\b(?:mortgage|loan|overdraft|savings?|isa|pension|credit\s*card|debt)\b/i,
+      /\bam\s+i\s+(?:paying|repaying)\s+(?:off\s+)?(?:a|an|any)\b[^?]*\b(?:mortgage|loan|debt)\b/i,
+    ],
+  },
+  {
     // Transaction-list & past-payment phrasings. Must precede the subscription
     // and mortgage rules, which would otherwise grab a merchant name (Netflix)
     // or "mortgage" and send a list request to the wrong handler.
