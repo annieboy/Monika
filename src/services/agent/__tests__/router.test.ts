@@ -313,3 +313,34 @@ describe('routeIntent — unknown intent AI fallback', () => {
     expect(response.length).toBeGreaterThan(0)
   })
 })
+
+// ── Unsolicited comparison suppression ──────────────────────────────────────
+
+describe('routeIntent — spending comparison is only shown when asked', () => {
+  const withData = () =>
+    makePrisma({
+      transaction: {
+        groupBy: vi.fn().mockResolvedValue([
+          { category: 'groceries', _sum: { amount: new Decimal('-120') }, _count: { id: 6 } },
+        ]),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: new Decimal('-100') } }),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    })
+
+  it('does NOT tack on a vs-last-month comparison for a plain total', async () => {
+    const out = await routeIntent('spending_analysis', 'How much did I spend this month', USER_ID, withData())
+    expect(out).toContain('Groceries')
+    expect(out.toLowerCase()).not.toContain('last month')
+  })
+
+  it('DOES show the comparison when the user asks to compare', async () => {
+    const out = await routeIntent(
+      'spending_analysis',
+      'How much did I spend this month compared to the previous month',
+      USER_ID,
+      withData(),
+    )
+    expect(out.toLowerCase()).toContain('last month')
+  })
+})

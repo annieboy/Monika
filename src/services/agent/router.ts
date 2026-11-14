@@ -240,6 +240,15 @@ export function isFollowUp(message: string): boolean {
   return false
 }
 
+/**
+ * Did the user actually ask to compare periods? We only tack a "vs last month"
+ * line onto a spending answer when they did — an unprompted comparison on a
+ * plain "how much did I spend" is noise (and was a repeated complaint).
+ */
+function wantsComparison(message: string): boolean {
+  return /\b(compared?\s+to|comparison|month[-\s]?on[-\s]?month|vs\.?\s+last|versus\s+last|than\s+last\b|than\s+(the\s+)?previous|up\s+or\s+down|gone\s+(up|down)|more\s+than\s+last|less\s+than\s+last)\b/i.test(message)
+}
+
 /** A charity/donation/Gift-Aid question (not a bare "giving"). */
 function isCharityQuery(message: string): boolean {
   return /\b(charit(y|ies|able)|donations?|donate[ds]?|gift\s*aid|tithe|charitable\s+giving)\b/i.test(message)
@@ -404,18 +413,18 @@ export async function routeIntent(
         structuredText = recommendRewardCard(spendInput)
         break
       }
-      // The "vs last month" comparison only makes sense when the question is
-      // about the current month to date. For a specific past month ("in
-      // October"), a single day ("on the 3rd") or a custom range, comparing
-      // against this-vs-last month is misleading, so we suppress it.
+      // Only show a "vs last month" comparison when the user actually asked to
+      // compare — and only for a current-month window, where that comparison is
+      // accurate. An unprompted comparison on a plain total is noise.
       const nowD = new Date()
       const isCurrentMonthWindow =
         fromDate.getDate() === 1 &&
         fromDate.getMonth() === nowD.getMonth() &&
         fromDate.getFullYear() === nowD.getFullYear()
+      const showComparison = isCurrentMonthWindow && wantsComparison(message)
       const [categories, comparison] = await Promise.all([
         analytics.getSpendingByCategory(userId, fromDate, toDate, categoryFilter),
-        isCurrentMonthWindow
+        showComparison
           ? analytics.getMonthlyComparison(userId, categoryFilter)
           : Promise.resolve({ thisMonth: 0, lastMonth: 0, changeAmount: 0, changePct: null }),
       ])
