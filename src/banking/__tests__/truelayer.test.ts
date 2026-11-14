@@ -302,7 +302,10 @@ describe('TrueLayerProvider — getTransactions', () => {
     expect(debit.transactionType).toBe('debit')
     expect(debit.amount).toBe(-24.50)
     expect(debit.merchantName).toBe('Tesco')
-    expect(debit.category).toBe('restaurants')
+    // Tesco is a supermarket → groceries. (The provider's transaction_category
+    // is a payment TYPE, not a spending category, so it's ignored; the merchant
+    // name is the real signal.)
+    expect(debit.category).toBe('groceries')
     expect(debit.rawDescription).toBe('TESCO STORES 1234')
 
     const credit = txns[1]!

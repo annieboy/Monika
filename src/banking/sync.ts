@@ -3,6 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library'
 import type { OpenBankingProvider, ProviderConsent, ProviderTransaction } from './types.js'
 import { transactionDedupHash, encrypt } from '../lib/crypto.js'
 import { trackEvent } from '../services/analytics/events.js'
+import { recategoriseExistingTransactions } from '../services/sync/recategoriseService.js'
 import { config } from '../config.js'
 
 // Refresh token if it expires within 5 minutes
@@ -250,6 +251,14 @@ export async function runFullSync(
   }
 
   const success = errors.length === 0
+
+  // Tidy historical rows that an older/weaker categoriser left uncategorised.
+  // Best-effort: a failure here must not fail the sync.
+  try {
+    await recategoriseExistingTransactions(prisma, userId)
+  } catch {
+    // swallow — categorisation backfill is non-critical
+  }
 
   // Update connection sync metadata
   await prisma.bankConnection.update({

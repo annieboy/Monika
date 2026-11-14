@@ -9,7 +9,7 @@
  */
 import { randomUUID } from 'crypto'
 import type { AccountType } from '@prisma/client'
-import { categoriseByMerchant } from '../../services/analytics/categorise.js'
+import { inferCategory } from '../../services/analytics/categorise.js'
 import type {
   OpenBankingProvider,
   ProviderAccount,
@@ -68,22 +68,6 @@ const ACCOUNT_TYPE_MAP: Record<string, AccountType> = {
   MORTGAGE: 'mortgage',
   PENSION: 'pension',
   LOAN: 'loan',
-}
-
-// TrueLayer transaction_category → our category string
-const CATEGORY_MAP: Record<string, string | null> = {
-  SHOPPING: 'shopping',
-  FOOD_AND_DRINK: 'restaurants',
-  TRANSPORT: 'transport',
-  TRAVEL: 'transport',
-  BILLS_AND_UTILITIES: 'bills',
-  ENTERTAINMENT: 'subscriptions',
-  HEALTH_AND_MEDICAL: 'health',
-  SALARY: 'income',
-  INCOME: 'income',
-  CASH_AND_ATM: null,
-  TRANSFER: null,
-  GENERAL: null,
 }
 
 // ── Provider class ─────────────────────────────────────────────────────────
@@ -355,17 +339,18 @@ export class TrueLayerProvider implements OpenBankingProvider {
       rawCategory !== 'INCOME' &&
       !isInternalTransfer &&
       /\b(refund|reversal|returned|chargeback|credit\s+adjustment)\b/i.test(desc)
-    // Provider category first; fall back to classification array, then to a
-    // merchant-name inference so real debits don't end up uncategorised.
-    const providerCategory = CATEGORY_MAP[rawCategory]
-    const classification = Array.isArray(t.transaction_classification)
-      ? t.transaction_classification.join(' ')
-      : undefined
+    // Income credits are labelled 'income'; everything else is inferred from
+    // the merchant name, MCC, TrueLayer classification and de-noised
+    // description, so real debits don't end up uncategorised.
     const category =
-      providerCategory ??
-      categoriseByMerchant(t.merchant_name) ??
-      categoriseByMerchant(classification) ??
-      categoriseByMerchant(t.description)
+      rawCategory === 'SALARY' || rawCategory === 'INCOME'
+        ? 'income'
+        : inferCategory({
+            merchantName: t.merchant_name,
+            description: t.description,
+            classification: t.transaction_classification,
+            mcc: t.merchant_category_code,
+          })
 
     return {
       providerTransactionId:
