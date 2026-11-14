@@ -259,3 +259,40 @@ describe('validateAndFormatResponse', () => {
     expect(count).toBe(1)
   })
 })
+
+// ── New-capability routing (protects the interception interactions) ──────────
+
+describe('End-to-end — new capability routing', () => {
+  let prisma: PrismaClient
+  beforeEach(() => { prisma = makeSeededPrisma() })
+
+  it('a charity question routes to the tax-year tracker, not a this-month category total', async () => {
+    const msg = 'how much did I spend on charity'
+    const { intent } = await classifyIntent(msg)
+    const out = await routeIntent(intent, msg, USER_A, prisma)
+    expect(out.toLowerCase()).toContain('tax year')
+  })
+
+  it('"what can you do?" shows the capability menu to a connected user', async () => {
+    const msg = 'what can you do?'
+    const { intent } = await classifyIntent(msg)
+    const out = await routeIntent(intent, msg, USER_A, prisma)
+    expect(out.toLowerCase()).toContain('safely spend')
+    expect(out.toLowerCase()).not.toContain('connect my bank')
+  })
+
+  it('a net-worth question returns an assets/worth answer', async () => {
+    const msg = "what's my net worth?"
+    const { intent } = await classifyIntent(msg)
+    expect(intent).toBe('net_worth')
+    const out = await routeIntent(intent, msg, USER_A, prisma)
+    expect(out.toLowerCase()).toMatch(/worth|assets/)
+  })
+
+  it('a plain spending total does not tack on an unsolicited vs-last-month comparison', async () => {
+    const msg = 'How much did I spend last month?'
+    const { intent } = await classifyIntent(msg)
+    const out = await routeIntent(intent, msg, USER_A, prisma)
+    expect(out.toLowerCase()).not.toContain('than last month')
+  })
+})
