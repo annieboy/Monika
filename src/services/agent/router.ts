@@ -91,6 +91,24 @@ async function buildConnectLink(prisma: PrismaClient, userId: string): Promise<s
 const STATIC_ONBOARDING =
   "Welcome to Monika! I'm your AI-powered UK finance assistant. Ask me about your spending, subscriptions, balance, or whether you can afford something. To get started, say \"connect my bank\"."
 
+// Shown when an ALREADY-CONNECTED user asks "what can you do?" / "help". Reflects
+// the real breadth so people know what to ask — the biggest barrier to a
+// "never open your banking app" assistant is not knowing it can answer.
+const CAPABILITIES_MENU =
+  `*Here's what I can help with* 👇\n\n` +
+  `💷 *Balances & money*\n` +
+  `• "What's my balance?" · "What's my net worth?"\n` +
+  `• "How much did I spend on groceries in October?"\n` +
+  `• "How much do I earn from <name>?"\n\n` +
+  `📅 *Bills & planning*\n` +
+  `• "What's due this week?" · "My subscriptions"\n` +
+  `• "How much can I safely spend this weekend?"\n` +
+  `• "Will I make it to payday?"\n\n` +
+  `🧾 *Going deeper*\n` +
+  `• "How much have I given to charity / in Gift Aid?"\n` +
+  `• "Any unusual spending?" · "Can I afford £X?"\n\n` +
+  `Just ask in plain English. Say *refresh* to pull your latest transactions.`
+
 /**
  * Does this message ask Monika to pull fresh data from the bank now?
  * "refresh", "update my account", "sync my data", "up to date", "check now"…
@@ -316,14 +334,16 @@ export async function routeIntent(
 
   // ── onboarding_help ────────────────────────────────────────────────────
   if (intent === 'onboarding_help') {
+    const alreadyConnected = await analytics.hasActiveBankConnection(userId)
     if (isConnectBankRequest(message)) {
-      const alreadyConnected = await analytics.hasActiveBankConnection(userId)
       if (alreadyConnected) {
-        return "Your bank is already connected. You can ask me about your spending, subscriptions, balance, or whether you can afford something."
+        return `Your bank's already connected ✅\n\n${CAPABILITIES_MENU}`
       }
       return buildConnectLink(prisma, userId)
     }
-    return STATIC_ONBOARDING
+    // "what can you do?" / "help": connected users get the real capability menu
+    // (not an onboarding prompt telling them to connect a bank they already have).
+    return alreadyConnected ? CAPABILITIES_MENU : STATIC_ONBOARDING
   }
 
   // On-demand refresh: pull the latest data from the bank now, so a recent
