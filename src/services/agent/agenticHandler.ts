@@ -13,6 +13,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
 import { getUpcomingBills } from '../bills/billCalendarService.js'
+import { getCharitySummary } from '../analytics/charityTrackerService.js'
+import { calculateNetWorth } from '../analytics/netWorthService.js'
 import type { HistoryMessage } from '../conversation/sessionService.js'
 import { allowAgentCall } from './rateLimiter.js'
 import { logger } from '../../logger.js'
@@ -71,6 +73,44 @@ const PERIOD_ENUM = [
   'this_financial_year', 'all_time',
 ]
 
+/** Parses a YYYY-MM-DD (or ISO) string; returns null if unusable. */
+function parseDate(s: string | undefined, endOfDay: boolean): Date | null {
+  if (!s || typeof s !== 'string') return null
+  const trimmed = s.trim()
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+  const d = new Date(dateOnly && endOfDay ? `${trimmed}T23:59:59` : trimmed)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Resolves a tool's time window. If the model supplied explicit `from`/`to`
+ * dates (for "on the 3rd", "between June and August", "last Tuesday"), use
+ * those; otherwise fall back to the named period, then the per-tool default.
+ */
+function resolveRange(
+  input: Record<string, unknown>,
+  fallback: Period = 'this_month',
+): { from: Date; to: Date; label: string } {
+  const from = parseDate(input['from'] as string | undefined, false)
+  const to = parseDate(input['to'] as string | undefined, true)
+  if (from || to) {
+    const f = from ?? new Date(2000, 0, 1)
+    const t = to ?? new Date()
+    const fmt = (d: Date): string => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    const sameDay = input['from'] === input['to'] && Boolean(input['from'])
+    return { from: f, to: t, label: sameDay ? fmt(f) : `${fmt(f)} to ${fmt(t)}` }
+  }
+  return periodToRange((input['period'] as Period | undefined) ?? fallback)
+}
+
+// A reusable schema fragment: every time-scoped tool accepts either a named
+// period or explicit from/to dates (YYYY-MM-DD) for arbitrary days/ranges.
+const DATE_PROPS = {
+  period: { type: 'string', enum: PERIOD_ENUM, description: 'A named period.' },
+  from: { type: 'string', description: 'Start date YYYY-MM-DD (use for a specific day or custom range; overrides period).' },
+  to: { type: 'string', description: 'End date YYYY-MM-DD (inclusive). For a single day, set from and to to the same date.' },
+}
+
 interface Tool {
   name: string
   description: string
@@ -90,7 +130,7 @@ const TOOLS: Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        period: { type: 'string', enum: PERIOD_ENUM, description: 'Time period. Defaults to this_month.' },
+        ...DATE_PROPS,
         category: { type: 'string', description: 'Optional category filter, e.g. "groceries", "transport", "restaurants".' },
       },
       required: [],
@@ -99,12 +139,12 @@ const TOOLS: Tool[] = [
   {
     name: 'search_transactions',
     description:
-      'Search/list individual transactions, optionally filtered by merchant/text, period, and amount range. Use for "show my transactions", "find the £40 charge", "what did I buy at Amazon".',
+      'Search/list individual transactions, optionally filtered by merchant/text, period, and amount range. Use for "show my transactions", "find the £40 charge", "what did I buy at Amazon", "what did I spend on the 3rd".',
     input_schema: {
       type: 'object',
       properties: {
         merchant: { type: 'string', description: 'Merchant or description text to match (case-insensitive).' },
-        period: { type: 'string', enum: PERIOD_ENUM },
+        ...DATE_PROPS,
         min_amount: { type: 'number', description: 'Minimum absolute amount in GBP.' },
         max_amount: { type: 'number', description: 'Maximum absolute amount in GBP.' },
         limit: { type: 'number', description: 'Max rows to return (default 15).' },
@@ -120,7 +160,7 @@ const TOOLS: Tool[] = [
       type: 'object',
       properties: {
         query: { type: 'string', description: 'The merchant/payee text to search for, e.g. "winners chapel".' },
-        period: { type: 'string', enum: PERIOD_ENUM },
+        ...DATE_PROPS,
       },
       required: ['query'],
     },
@@ -132,7 +172,7 @@ const TOOLS: Tool[] = [
       type: 'object',
       properties: {
         merchant: { type: 'string', description: 'Merchant name, e.g. "Tesco", "Costa".' },
-        period: { type: 'string', enum: PERIOD_ENUM },
+        ...DATE_PROPS,
       },
       required: ['merchant'],
     },
@@ -153,9 +193,46 @@ const TOOLS: Tool[] = [
       'Totals over a period: money IN (all income/credits), money OUT (all spending/debits), the net, and how much of the "in" is salary/pay. Use for "total incoming/outgoing this financial year", "account summary" (earned vs spent), and "how much from salary". Internal transfers are excluded.',
     input_schema: {
       type: 'object',
-      properties: { period: { type: 'string', enum: PERIOD_ENUM, description: 'Defaults to this_financial_year.' } },
+      properties: { ...DATE_PROPS },
       required: [],
     },
+  },
+  {
+    name: 'get_safe_to_spend',
+    description:
+      'How much the user can safely spend over a short horizon after upcoming bills/direct debits and a small buffer. Use for "can I afford to spend £X", "how much can I safely spend this weekend", "will I make it to payday", "is it safe to spend".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Horizon in days: ~2 for a weekend, 7 for a week, up to ~30 for "until payday"/this month. Defaults to 7.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_income_from_payer',
+    description:
+      'Total money COMING IN from a specific named payer/source (credits matching the name) — e.g. "how much did I get from PayStream / my tenant / Jane / DWP". Not limited to salary. Use this for income from a NAMED source; use get_income only for overall monthly salary.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        payer: { type: 'string', description: 'The payer/source name to match, e.g. "PayStream".' },
+        ...DATE_PROPS,
+      },
+      required: ['payer'],
+    },
+  },
+  {
+    name: 'get_charitable_giving',
+    description:
+      'Charitable donations in the current UK tax year: total given, the Gift Aid uplift (25% charities can reclaim), and the list of donations. Use for "how much have I given to charity", "my donations", "how much gift aid", "charitable giving this tax year".',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'get_net_worth',
+    description:
+      'Estimated net worth: total assets (account balances) minus estimated liabilities (debt-like recurring payments such as mortgage/loan/credit card). An estimate from connected accounts only. Use for "what am I worth", "net worth", "assets vs debts".',
+    input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'compare_spending',
@@ -216,7 +293,7 @@ async function runTool(
       })
     }
     case 'get_spending': {
-      const { from, to, label } = periodToRange(period)
+      const { from, to, label } = resolveRange(input)
       const cats = await analytics.getSpendingByCategory(userId, from, to, input['category'] as string | undefined)
       const total = cats.reduce((s, c) => s + c.total, 0)
       return JSON.stringify({
@@ -226,7 +303,7 @@ async function runTool(
       })
     }
     case 'search_transactions': {
-      const { from, to } = periodToRange(period ?? 'last_90_days')
+      const { from, to } = resolveRange(input, 'last_90_days')
       const merchant = input['merchant'] as string | undefined
       const minA = input['min_amount'] as number | undefined
       const maxA = input['max_amount'] as number | undefined
@@ -235,12 +312,12 @@ async function runTool(
       return JSON.stringify({ count: result.length, transactions: result })
     }
     case 'find_merchants': {
-      const { from, to, label } = periodToRange(period ?? 'this_year')
+      const { from, to, label } = resolveRange(input, 'this_year')
       const merchants = await analytics.findMerchants(userId, (input['query'] as string) ?? '', from, to)
       return JSON.stringify({ period: label, query: input['query'], matches: merchants })
     }
     case 'get_merchant_spend': {
-      const { from, to, label } = periodToRange(period ?? 'last_90_days')
+      const { from, to, label } = resolveRange(input, 'last_90_days')
       const merchant = (input['merchant'] as string) ?? ''
       const r = await analytics.getSpendingByMerchantName(userId, merchant, from, to)
       return JSON.stringify({ merchant, period: label, total: r.total, transaction_count: r.transactionCount, transactions: r.transactions })
@@ -259,7 +336,7 @@ async function runTool(
       return JSON.stringify({ monthly_income: profile.monthlyIncome, disposable_income: profile.disposableIncome })
     }
     case 'get_cashflow_summary': {
-      const { from, to, label } = periodToRange(period ?? 'this_financial_year')
+      const { from, to, label } = resolveRange(input, 'this_financial_year')
       const cf = await analytics.getCashflowSummary(userId, from, to)
       return JSON.stringify({
         period: label,
@@ -267,6 +344,53 @@ async function runTool(
         total_out: cf.totalOut,
         net: cf.net,
         salary_total: cf.salaryTotal,
+      })
+    }
+    case 'get_safe_to_spend': {
+      const days = Math.max(1, Math.min((input['days'] as number | undefined) ?? 7, 60))
+      const s = await analytics.getSafeToSpend(userId, days)
+      return JSON.stringify({
+        period: s.periodLabel,
+        current_balance: s.currentBalance,
+        bills_due_this_period: s.committedThisPeriod,
+        safe_to_spend: s.safeAmount,
+        warnings: s.warningFlags,
+      })
+    }
+    case 'get_income_from_payer': {
+      const { from, to, label } = resolveRange(input, 'this_financial_year')
+      const payer = (input['payer'] as string) ?? ''
+      const r = await analytics.getIncomeFromPayer(userId, payer, from, to)
+      return JSON.stringify({
+        payer,
+        period: label,
+        total_received: r.total,
+        transaction_count: r.transactionCount,
+        transactions: r.transactions,
+      })
+    }
+    case 'get_charitable_giving': {
+      const c = await getCharitySummary(prisma, userId)
+      return JSON.stringify({
+        tax_year: c.taxYear,
+        total_donated: c.totalDonated,
+        gift_aid_uplift: c.giftAidUplift,
+        donation_count: c.donations.length,
+        donations: c.donations.map(d => ({
+          date: d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+          merchant: d.merchant,
+          amount: Math.abs(d.amount),
+        })),
+      })
+    }
+    case 'get_net_worth': {
+      const n = await calculateNetWorth(prisma, userId)
+      return JSON.stringify({
+        net_worth: n.netWorth,
+        total_assets: n.totalAssets,
+        estimated_liabilities: n.estimatedLiabilities,
+        accounts: n.accounts,
+        debt_payments: n.debtPayments,
       })
     }
     case 'compare_spending': {
@@ -319,6 +443,8 @@ const SYSTEM_PROMPT = `You are Monika, a warm, sharp UK personal finance assista
 
 You answer questions about the user's real bank data by calling the provided tools. Always call a tool to get real figures — never invent numbers. Call multiple tools if needed to fully answer.
 
+Today is {{TODAY}}. Resolve relative dates YOURSELF and pass explicit from/to dates (YYYY-MM-DD) to the tools whenever the question is about a specific day or a custom range — "yesterday", "last Tuesday", "on the 3rd", "earlier this month", "in October", "between June and August", "since payday". For a single day, set from and to to that same date. Use the named period only for the standard buckets (this_month, last_month, this_year, …).
+
 Use the conversation so far for context — treat short follow-ups as continuations, not new topics. If the user just asked about groceries this month and then says "what about last month?" or "and at Tesco?", carry the earlier subject over and only change what they changed.
 
 Handling common requests:
@@ -334,6 +460,10 @@ Handling common requests:
 - "total incoming/outgoing (this financial year)", "account summary" (earned vs spent), "how much from salary" → get_cashflow_summary (default period this_financial_year). Report money in, money out, net, and salary separately.
 - "do I have a <mortgage/loan/savings/credit card/overdraft>?" is a factual lookup, NOT an affordability calc: call get_account_balances (its accounts include the type, e.g. a "mortgage" or "savings" account) AND search_transactions for the lender or the word (e.g. "mortgage", "Halifax"). Answer plainly — "yes, you've a mortgage account (…)", or "I can see regular payments to <lender> that look like a mortgage", or "I can't see one in the connected account(s) — it may be at a bank you haven't linked." Never run an affordability analysis for this.
 - "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
+- "can I afford to spend £X?" / "how much can I safely spend this weekend?" / "will I make it to payday?" / "is it safe to spend?" → get_safe_to_spend (days: ~2 for a weekend, 7 for a week, up to ~30 for "until payday"). Lead with the safe amount; mention bills due and any warning. If they named an amount, say plainly whether it fits.
+- "how much did I get/receive from <named source>" where the source is NOT their salary (a tenant, a client, a person, DWP, a platform like PayStream) → get_income_from_payer. Use get_income only for overall monthly salary.
+- "how much have I given to charity?" / "my donations" / "how much gift aid?" → get_charitable_giving. Report total donated this tax year and the Gift Aid uplift; add the advice disclaimer.
+- "what's my net worth?" / "what am I worth?" / "assets vs debts" → get_net_worth. Call it an estimate based on connected accounts.
 
 Style:
 - British English, £ currency, format as £X,XXX.XX
@@ -369,6 +499,9 @@ export async function answerWithAgent(
   }
 
   const analytics = new TransactionAnalyticsService(prisma)
+  const now = new Date()
+  const todayLabel = `${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} (${now.toISOString().slice(0, 10)})`
+  const systemPrompt = SYSTEM_PROMPT.replace('{{TODAY}}', todayLabel)
   const startedAt = Date.now()
   let inputTokens = 0
   let outputTokens = 0
@@ -393,7 +526,7 @@ export async function answerWithAgent(
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 700,
-          system: SYSTEM_PROMPT,
+          system: systemPrompt,
           tools: TOOLS,
           messages,
         }),
@@ -452,4 +585,4 @@ export async function answerWithAgent(
 }
 
 // Re-export for convenience in tests.
-export { periodToRange, gbp }
+export { periodToRange, gbp, resolveRange, TOOLS }
