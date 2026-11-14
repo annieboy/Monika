@@ -179,6 +179,17 @@ export function isFollowUp(message: string): boolean {
   ) {
     return true
   }
+  // Short interrogatives that refer back to the previous answer:
+  // "what subscription?", "which merchant?", "what was it?", "which one?",
+  // "what for?", "how many?". These only make sense with the prior turn.
+  if (
+    words.length <= 4 &&
+    /^(what|which|who|whom|whose|where|why|when|how\s+(many|much|come))\b/.test(m) &&
+    !/\b(balance|afford|mortgage|credit|net\s*worth|financial\s+health)\b/.test(m) &&
+    !/^how\s+much\s+(did|have|do|can|is|are)\b/.test(m)
+  ) {
+    return true
+  }
   return false
 }
 
