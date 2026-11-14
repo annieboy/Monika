@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Intent } from './intents.js'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
-import { extractQueryContext, extractSpendSubject, extractEarnSubject } from '../analytics/context.js'
+import { extractQueryContext, extractSpendSubject, extractEarnSubject, extractExplicitDateRange } from '../analytics/context.js'
 import { refreshUserData } from '../sync/refreshService.js'
 import {
   formatSpendingAnalysis,
@@ -123,7 +123,9 @@ async function handleMerchantSpend(
   isCategory: boolean,
 ): Promise<string | null> {
   const analytics = new TransactionAnalyticsService(prisma)
-  const hasTimeframe = /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message)
+  const hasTimeframe =
+    /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message) ||
+    extractExplicitDateRange(message) !== null
   const now = new Date()
   const yearStart = new Date(now.getFullYear(), 0, 1)
   const { fromDate, toDate } = hasTimeframe
@@ -183,7 +185,9 @@ async function handlePayerIncome(
   message: string,
 ): Promise<string> {
   const analytics = new TransactionAnalyticsService(prisma)
-  const hasTimeframe = /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message)
+  const hasTimeframe =
+    /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message) ||
+    extractExplicitDateRange(message) !== null
   const { fromDate, toDate } = hasTimeframe
     ? extractQueryContext(message)
     : { fromDate: new Date(new Date().getFullYear(), 0, 1), toDate: new Date() }
@@ -372,9 +376,20 @@ export async function routeIntent(
         structuredText = recommendRewardCard(spendInput)
         break
       }
+      // The "vs last month" comparison only makes sense when the question is
+      // about the current month to date. For a specific past month ("in
+      // October"), a single day ("on the 3rd") or a custom range, comparing
+      // against this-vs-last month is misleading, so we suppress it.
+      const nowD = new Date()
+      const isCurrentMonthWindow =
+        fromDate.getDate() === 1 &&
+        fromDate.getMonth() === nowD.getMonth() &&
+        fromDate.getFullYear() === nowD.getFullYear()
       const [categories, comparison] = await Promise.all([
         analytics.getSpendingByCategory(userId, fromDate, toDate, categoryFilter),
-        analytics.getMonthlyComparison(userId, categoryFilter),
+        isCurrentMonthWindow
+          ? analytics.getMonthlyComparison(userId, categoryFilter)
+          : Promise.resolve({ thisMonth: 0, lastMonth: 0, changeAmount: 0, changePct: null }),
       ])
       structuredText = formatSpendingAnalysis(categories, comparison, categoryFilter, fromDate)
       break
