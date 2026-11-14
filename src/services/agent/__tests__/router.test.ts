@@ -344,3 +344,28 @@ describe('routeIntent — spending comparison is only shown when asked', () => {
     expect(out.toLowerCase()).toContain('last month')
   })
 })
+
+// ── "What can you do?" is connection-aware ──────────────────────────────────
+
+describe('routeIntent — help / capabilities', () => {
+  const disconnected = () =>
+    makePrisma({ bankConnection: { findFirst: vi.fn().mockResolvedValue(null) } })
+
+  it('shows the real capability menu to a connected user (not a connect prompt)', async () => {
+    const out = await routeIntent('onboarding_help', 'what can you do', USER_ID, makePrisma())
+    expect(out.toLowerCase()).toContain('net worth')
+    expect(out.toLowerCase()).toContain('safely spend')
+    expect(out.toLowerCase()).not.toContain('connect my bank')
+  })
+
+  it('prompts a not-yet-connected user to connect', async () => {
+    const out = await routeIntent('onboarding_help', 'what can you do', USER_ID, disconnected())
+    expect(out.toLowerCase()).toContain('connect')
+  })
+
+  it('tells an already-connected user their bank is connected and shows the menu', async () => {
+    const out = await routeIntent('onboarding_help', 'connect my bank', USER_ID, makePrisma())
+    expect(out.toLowerCase()).toContain('already connected')
+    expect(out.toLowerCase()).toContain('safely spend')
+  })
+})
