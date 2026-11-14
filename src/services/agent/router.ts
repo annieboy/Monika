@@ -267,6 +267,25 @@ function wantsComparison(message: string): boolean {
   return /\b(compared?\s+to|comparison|month[-\s]?on[-\s]?month|vs\.?\s+last|versus\s+last|than\s+last\b|than\s+(the\s+)?previous|up\s+or\s+down|gone\s+(up|down)|more\s+than\s+last|less\s+than\s+last)\b/i.test(message)
 }
 
+// Data intents where a "nothing found" is often a false negative (narrow
+// window / exact-match miss) worth a second pass through the agent. Intents
+// whose empty result is a valid answer ("no unusual spending", "no donations")
+// are deliberately excluded.
+const FALLBACK_INTENTS = new Set<Intent>([
+  'spending_analysis', 'merchant_query', 'transaction_search', 'income_query', 'savings_query',
+])
+
+/** Does a structured answer read as an empty "couldn't find anything" result? */
+function looksLikeDeadEnd(text: string): boolean {
+  return (
+    /\bno spending found\b/i.test(text) ||
+    /\bno transactions?\s+found\b/i.test(text) ||
+    /\bcouldn'?t find any\b/i.test(text) ||
+    /\b(can'?t|cannot)\s+see any\b/i.test(text) ||
+    /\bno results?\b/i.test(text)
+  )
+}
+
 /** A charity/donation/Gift-Aid question (not a bare "giving"). */
 function isCharityQuery(message: string): boolean {
   return /\b(charit(y|ies|able)|donations?|donate[ds]?|gift\s*aid|tithe|charitable\s+giving)\b/i.test(message)
@@ -684,6 +703,16 @@ export async function routeIntent(
       }
       return STATIC_UNKNOWN
     }
+  }
+
+  // Second chance: a single-shot structured handler can dead-end ("No spending
+  // found") on a narrow window or an exact-match miss, while the agent — with
+  // fuzzy merchant matching and flexible date windows — would find it. For the
+  // data intents where an empty result is most likely a false negative, retry
+  // with the agent and prefer its answer when it actually found something.
+  if (anthropicApiKey && FALLBACK_INTENTS.has(intent) && looksLikeDeadEnd(structuredText)) {
+    const agentAnswer = await answerWithAgent(message, userId, prisma, anthropicApiKey, history)
+    if (agentAnswer && !looksLikeDeadEnd(agentAnswer)) return agentAnswer
   }
 
   // Intents whose output is an itemised list/table we want to show verbatim —

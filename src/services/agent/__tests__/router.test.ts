@@ -369,3 +369,29 @@ describe('routeIntent — help / capabilities', () => {
     expect(out.toLowerCase()).toContain('safely spend')
   })
 })
+
+// ── Dead-end structured result falls back to the agent ──────────────────────
+
+describe('routeIntent — empty structured result retries via the agent', () => {
+  const mockFetch = vi.fn()
+  beforeEach(() => { vi.stubGlobal('fetch', mockFetch) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('prefers the agent answer when a data intent finds nothing', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: 'You spent £42.00 at Tesco on 3 Nov.' }],
+        stop_reason: 'end_turn',
+        usage: {},
+      }),
+    })
+    const out = await routeIntent('spending_analysis', 'how much did I spend', 'fallback-user-1', makePrisma(), 'test-key')
+    expect(out).toBe('You spent £42.00 at Tesco on 3 Nov.')
+  })
+
+  it('keeps the dead-end structured answer when no API key is available', async () => {
+    const out = await routeIntent('spending_analysis', 'how much did I spend', 'fallback-user-2', makePrisma())
+    expect(out.toLowerCase()).toContain('no spending found')
+  })
+})
