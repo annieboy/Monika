@@ -332,6 +332,7 @@ Handling common requests:
 - "last payment to <merchant>" / "when did I last pay <merchant>" → search_transactions for that merchant; report the MOST RECENT one (date + amount).
 - "when is <bill> due" / "upcoming payments" → get_upcoming_bills, then pick out the matching bill and give its due date (and note it's estimated from the usual payment cycle).
 - "total incoming/outgoing (this financial year)", "account summary" (earned vs spent), "how much from salary" → get_cashflow_summary (default period this_financial_year). Report money in, money out, net, and salary separately.
+- "do I have a <mortgage/loan/savings/credit card/overdraft>?" is a factual lookup, NOT an affordability calc: call get_account_balances (its accounts include the type, e.g. a "mortgage" or "savings" account) AND search_transactions for the lender or the word (e.g. "mortgage", "Halifax"). Answer plainly — "yes, you've a mortgage account (…)", or "I can see regular payments to <lender> that look like a mortgage", or "I can't see one in the connected account(s) — it may be at a bank you haven't linked." Never run an affordability analysis for this.
 - "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
 
 Style:

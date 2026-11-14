@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Intent } from './intents.js'
 import { TransactionAnalyticsService } from '../analytics/analytics.js'
-import { extractQueryContext, extractSpendSubject } from '../analytics/context.js'
+import { extractQueryContext, extractSpendSubject, extractEarnSubject } from '../analytics/context.js'
 import { refreshUserData } from '../sync/refreshService.js'
 import {
   formatSpendingAnalysis,
@@ -120,19 +120,34 @@ async function handleMerchantSpend(
   userId: string,
   subject: string,
   message: string,
-): Promise<string> {
+  isCategory: boolean,
+): Promise<string | null> {
   const analytics = new TransactionAnalyticsService(prisma)
-  // Merchant lookups default to the current year when no timeframe is given, so
-  // we don't miss payments from earlier months.
   const hasTimeframe = /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message)
+  const now = new Date()
+  const yearStart = new Date(now.getFullYear(), 0, 1)
   const { fromDate, toDate } = hasTimeframe
     ? extractQueryContext(message)
-    : { fromDate: new Date(new Date().getFullYear(), 0, 1), toDate: new Date() }
+    : { fromDate: yearStart, toDate: now }
 
+  // Always try the merchant first — even for words that double as categories
+  // (uber→transport, tesco→groceries), the user named a specific thing.
   const merchants = await analytics.findMerchants(userId, subject, fromDate, toDate)
 
   if (merchants.length === 0) {
-    return `I couldn't find any transactions for *${subject}* in that period. Try the name exactly as it appears on your statement, or a wider timeframe.`
+    // Nothing in the asked window. Widen to this year so we can say where the
+    // spending actually is, rather than a flat "couldn't find".
+    if (hasTimeframe) {
+      const wider = await analytics.findMerchants(userId, subject, yearStart, now)
+      if (wider.length > 0) {
+        const widerTotal = wider.reduce((s, m) => s + m.total, 0)
+        const names = wider.length === 1 ? `*${wider[0]!.merchant}*` : `${wider.length} matching merchants`
+        return `Nothing for *${subject}* in that period. But you've spent *${fmtGbp(widerTotal)}* at ${names} so far this year — want the breakdown?`
+      }
+    }
+    // A pure category word with no merchant match → let the category handler run.
+    if (isCategory) return null
+    return `I couldn't find any transactions for *${subject}*. Try the name exactly as it appears on your statement.`
   }
 
   // Several genuinely different merchant names → ask which one.
@@ -155,6 +170,34 @@ async function handleMerchantSpend(
   if (detail.transactions.length > 15) out += `…and ${detail.transactions.length - 15} more.\n`
   out += `\n*Total: ${fmtGbp(detail.total)}* across ${detail.transactionCount} payment${detail.transactionCount === 1 ? '' : 's'}`
   return out
+}
+
+/**
+ * Deterministic answer for "how much do I earn/receive from <payer>".
+ * Sums the credits coming in from that payer and lists them.
+ */
+async function handlePayerIncome(
+  prisma: PrismaClient,
+  userId: string,
+  payer: string,
+  message: string,
+): Promise<string> {
+  const analytics = new TransactionAnalyticsService(prisma)
+  const hasTimeframe = /today|yesterday|this\s+(week|month|year)|last\s+(week|month|year|\d+)|financial\s+year|\b\d{4}\b/i.test(message)
+  const { fromDate, toDate } = hasTimeframe
+    ? extractQueryContext(message)
+    : { fromDate: new Date(new Date().getFullYear(), 0, 1), toDate: new Date() }
+
+  const r = await analytics.getIncomeFromPayer(userId, payer, fromDate, toDate)
+  if (r.transactionCount === 0) {
+    return `I can't see any money coming in from *${payer}* in that period. If the income lands in an account you haven't connected, I won't see it — or try the name exactly as it appears on your statement.`
+  }
+  let out = `You've received *${fmtGbp(r.total)}* from *${payer}* across ${r.transactionCount} payment${r.transactionCount === 1 ? '' : 's'}:\n\n`
+  for (const t of r.transactions.slice(0, 12)) {
+    out += `• ${t.date}: *${fmtGbp(t.amount)}*\n`
+  }
+  if (r.transactions.length > 12) out += `…and ${r.transactions.length - 12} more.\n`
+  return out.trim()
 }
 
 /**
@@ -288,12 +331,21 @@ export async function routeIntent(
     // fall through to normal handling if the agent is unavailable
   }
 
-  // "how much did I spend on <X>": when <X> is a merchant/payee (not a known
-  // category), search for it and list the transactions directly — don't run a
-  // category breakdown or ask permission to "dig in".
+  // "how much do I earn from <X>": sum the money coming IN from that payer,
+  // instead of guessing at a salary flag.
+  const earnSubject = extractEarnSubject(message)
+  if (earnSubject) {
+    return handlePayerIncome(prisma, userId, earnSubject, message)
+  }
+
+  // "how much did I spend on <X>": try the merchant first (even for words that
+  // double as categories, like "uber"), list the transactions, and widen the
+  // window if the asked period is empty. Falls through to the category handler
+  // only for a pure category word with no merchant match.
   const spendSubject = extractSpendSubject(message)
-  if (spendSubject && !spendSubject.isCategory) {
-    return handleMerchantSpend(prisma, userId, spendSubject.subject, message)
+  if (spendSubject) {
+    const merchantAnswer = await handleMerchantSpend(prisma, userId, spendSubject.subject, message, spendSubject.isCategory)
+    if (merchantAnswer) return merchantAnswer
   }
 
   const { fromDate, toDate, categoryFilter } = extractQueryContext(message)

@@ -67,6 +67,19 @@ export function extractSpendSubject(message: string): { subject: string; isCateg
   return { subject, isCategory }
 }
 
+/**
+ * For "how much do I earn/receive from <X>" questions: pulls out the payer so
+ * we can sum the money COMING IN from them (credits), rather than guessing at a
+ * salary flag. Returns null when it isn't an income-from-payer question.
+ */
+export function extractEarnSubject(message: string): string | null {
+  const m = message.match(
+    /\b(?:earn|earned|earning|income|paid|receive|received|get|getting)\s+(?:from|by|via|through)\s+([a-z0-9&'. ]+?)(?:\s+(?:this|last|in|over|since|before|during|for|per|each)\b|[?.!]|$)/i,
+  )
+  const subject = m?.[1]?.trim()
+  return subject && subject.length > 1 ? subject : null
+}
+
 export function extractQueryContext(message: string): QueryContext {
   const now = new Date()
 

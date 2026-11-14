@@ -5,7 +5,7 @@
  * calculations produce deterministic results.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { extractQueryContext, extractSpendSubject } from '../context.js'
+import { extractQueryContext, extractSpendSubject, extractEarnSubject } from '../context.js'
 
 const FROZEN = new Date('2024-06-15T14:00:00Z')
 
@@ -236,5 +236,17 @@ describe('extractSpendSubject', () => {
   it('returns null when there is no "spend on X"', () => {
     expect(extractSpendSubject("what's my balance?")).toBeNull()
     expect(extractSpendSubject('how much did I spend this month')).toBeNull()
+  })
+})
+
+describe('extractEarnSubject', () => {
+  it('pulls the payer from income questions', () => {
+    expect(extractEarnSubject('how much do I earn from PayStream')).toBe('PayStream')
+    expect(extractEarnSubject('what do I receive from Acme Ltd each month')).toBe('Acme Ltd')
+    expect(extractEarnSubject('how much am I paid by Employer this year')).toBe('Employer')
+  })
+  it('returns null for non-income questions', () => {
+    expect(extractEarnSubject('how much did I spend on groceries')).toBeNull()
+    expect(extractEarnSubject("what's my balance")).toBeNull()
   })
 })
