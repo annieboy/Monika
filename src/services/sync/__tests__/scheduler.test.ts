@@ -10,15 +10,16 @@ import type { PrismaClient } from '@prisma/client'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../../../config.js', () => ({
-  config: {
-    TRUELAYER_CLIENT_ID: 'tl-client',
-    TRUELAYER_CLIENT_SECRET: 'tl-secret',
-    TRUELAYER_REDIRECT_URI: 'https://example.com/callback',
-    TRUELAYER_ENVIRONMENT: 'sandbox',
-    ENCRYPTION_KEY: 'a'.repeat(64),
-  },
+const mockConfig = vi.hoisted(() => ({
+  TRUELAYER_CLIENT_ID: 'tl-client',
+  TRUELAYER_CLIENT_SECRET: 'tl-secret',
+  TRUELAYER_REDIRECT_URI: 'https://example.com/callback',
+  TRUELAYER_ENVIRONMENT: 'sandbox',
+  ENCRYPTION_KEY: 'a'.repeat(64),
+  BACKGROUND_JOBS_ENABLED: true,
 }))
+
+vi.mock('../../../config.js', () => ({ config: mockConfig }))
 
 vi.mock('../../../lib/crypto.js', () => ({
   decrypt: vi.fn().mockReturnValue(Buffer.from('access-token')),
@@ -74,7 +75,7 @@ function makePrisma(connections: ReturnType<typeof makeConnection>[] = [makeConn
  * Starts the scheduler and captures the callback registered with setInterval.
  * Returns the callback so tests can invoke it directly.
  */
-function captureCallback(prisma: PrismaClient): { callback: () => Promise<void>; interval: ReturnType<typeof setInterval> } {
+function captureCallback(prisma: PrismaClient): { callback: () => Promise<void>; interval: ReturnType<typeof setInterval> | null } {
   let capturedCallback: (() => void) | undefined
   const originalSetInterval = globalThis.setInterval
   const spyInterval = vi.spyOn(globalThis, 'setInterval').mockImplementationOnce((fn) => {
@@ -107,7 +108,7 @@ describe('startSyncScheduler', () => {
     const prisma = makePrisma()
     const interval = startSyncScheduler(prisma)
     expect(interval).toBeDefined()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('registers the interval with a 6-hour delay', () => {
@@ -116,14 +117,28 @@ describe('startSyncScheduler', () => {
     const interval = startSyncScheduler(prisma)
     expect(spy).toHaveBeenCalledWith(expect.any(Function), SIX_HOURS_MS)
     spy.mockRestore()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('does not sync immediately on startup', () => {
     const prisma = makePrisma()
     const interval = startSyncScheduler(prisma)
     expect(prisma.bankConnection.findMany).not.toHaveBeenCalled()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
+  })
+
+  it('kill switch: does not start the scheduler when BACKGROUND_JOBS_ENABLED is false', () => {
+    const spy = vi.spyOn(globalThis, 'setInterval')
+    mockConfig.BACKGROUND_JOBS_ENABLED = false
+    try {
+      const prisma = makePrisma()
+      const interval = startSyncScheduler(prisma)
+      expect(interval).toBeNull()
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      mockConfig.BACKGROUND_JOBS_ENABLED = true
+      spy.mockRestore()
+    }
   })
 })
 
@@ -143,7 +158,7 @@ describe('runScheduledSync — happy path', () => {
     }
     expect(query.where.consentStatus).toBe('active')
     expect(query.where.provider).toBe('truelayer')
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('calls runFullSync for each connection', async () => {
@@ -151,7 +166,7 @@ describe('runScheduledSync — happy path', () => {
     const { callback, interval } = captureCallback(prisma)
     await callback()
     expect(runFullSync).toHaveBeenCalledTimes(2)
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('skips sync when no connections are active', async () => {
@@ -159,7 +174,7 @@ describe('runScheduledSync — happy path', () => {
     const { callback, interval } = captureCallback(prisma)
     await callback()
     expect(runFullSync).not.toHaveBeenCalled()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('passes refresh token to sync when connection has one', async () => {
@@ -169,7 +184,7 @@ describe('runScheduledSync — happy path', () => {
     expect(runFullSync).toHaveBeenCalledOnce()
     const consent = vi.mocked(runFullSync).mock.calls[0]![3] as unknown as Record<string, unknown>
     expect(consent.refreshToken).toBe('access-token') // decrypt mock returns 'access-token'
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 })
 
@@ -187,7 +202,7 @@ describe('startSyncScheduler — catch on runScheduledSync throw', () => {
     const { callback, interval } = captureCallback(prisma)
     // Should not throw even though runScheduledSync rejects
     await expect(callback()).resolves.not.toThrow()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 })
 
@@ -204,7 +219,7 @@ describe('runScheduledSync — error isolation', () => {
     const { callback, interval } = captureCallback(prisma)
     await callback()
     expect(runFullSync).toHaveBeenCalledTimes(2)
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('marks failed connection with lastSyncStatus error', async () => {
@@ -217,7 +232,7 @@ describe('runScheduledSync — error isolation', () => {
       data: Record<string, unknown>
     }
     expect(arg.data.lastSyncStatus).toBe('error')
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('does not throw when bankConnection.update fails during error handling', async () => {
@@ -226,7 +241,7 @@ describe('runScheduledSync — error isolation', () => {
     vi.mocked(prisma.bankConnection.update).mockRejectedValueOnce(new Error('update failed'))
     const { callback, interval } = captureCallback(prisma)
     await expect(callback()).resolves.not.toThrow()
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('handles non-Error rejection values in lastSyncError', async () => {
@@ -239,7 +254,7 @@ describe('runScheduledSync — error isolation', () => {
       data: Record<string, unknown>
     }
     expect(arg.data.lastSyncError).toBe('string-error')
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 
   it('includes tokenExpiresAt in consent when connection has it', async () => {
@@ -250,6 +265,6 @@ describe('runScheduledSync — error isolation', () => {
     await callback()
     const consent = vi.mocked(runFullSync).mock.calls[0]![3] as unknown as Record<string, unknown>
     expect(consent.tokenExpiresAt).toEqual(expiresAt)
-    clearInterval(interval)
+    clearInterval(interval ?? undefined)
   })
 })

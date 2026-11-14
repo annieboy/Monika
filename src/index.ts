@@ -62,9 +62,16 @@ async function start(): Promise<void> {
       'Server started',
     )
     if (config.NODE_ENV === 'production') {
-      startSyncScheduler(app.prisma)
-      startOpportunityWorker(app.prisma)
-      await scheduleRecurringJobs()
+      if (config.BACKGROUND_JOBS_ENABLED) {
+        startSyncScheduler(app.prisma)
+        startOpportunityWorker(app.prisma)
+        await scheduleRecurringJobs()
+      } else {
+        logger.warn(
+          'BACKGROUND_JOBS_ENABLED=false — background jobs (scheduled sync + workers) are OFF. ' +
+            'Set it back to true and restart to resume.',
+        )
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Failed to start server')

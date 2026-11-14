@@ -18,12 +18,28 @@ const hexKey64 = z
     message: 'Must be a 64-character hex string. Generate: openssl rand -hex 32',
   })
 
+/**
+ * Parses a boolean-ish environment variable. Unset or empty → `def`;
+ * "false"/"0"/"off"/"no" (any case) → false; anything else → true.
+ * (Avoids z.coerce.boolean, which treats the string "false" as true.)
+ */
+export function parseBoolEnv(value: string | undefined, def: boolean): boolean {
+  if (value === undefined || value.trim() === '') return def
+  return !['false', '0', 'off', 'no'].includes(value.trim().toLowerCase())
+}
+
 const configSchema = z.object({
   // Application
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
+
+  // Operational kill switch. Set to "false" (then restart the service) to stop
+  // ALL background jobs — the scheduled bank sync and the notification/
+  // opportunity workers — without a code deploy. On by default. User-initiated
+  // actions (chat replies, "refresh") are unaffected.
+  BACKGROUND_JOBS_ENABLED: z.string().optional().transform((v) => parseBoolEnv(v, true)),
 
   // Database
   DATABASE_URL: z.string().url().startsWith('postgresql://'),
