@@ -460,3 +460,28 @@ describe('routeIntent — payment rejection', () => {
     expect(response.toLowerCase()).toContain('payment')
   })
 })
+
+// ── getUncategorisedMerchants ───────────────────────────────────────────────
+
+describe('TransactionAnalyticsService.getUncategorisedMerchants', () => {
+  it('returns top uncategorised merchants, dropping blanks and honouring the limit', async () => {
+    const rows = [
+      { merchantNameClean: 'Winners Chapel', _sum: { amount: new Decimal('-1200') }, _count: { id: 3 } },
+      { merchantNameClean: 'Acme Ltd', _sum: { amount: new Decimal('-800') }, _count: { id: 5 } },
+      { merchantNameClean: null, _sum: { amount: new Decimal('-50') }, _count: { id: 1 } },
+      { merchantNameClean: '   ', _sum: { amount: new Decimal('-20') }, _count: { id: 1 } },
+    ]
+    const prisma = makePrisma({ transaction: { groupBy: vi.fn().mockResolvedValue(rows) } })
+    const svc = new TransactionAnalyticsService(prisma)
+    const result = await svc.getUncategorisedMerchants(USER_ID, new Date('2026-01-01'), new Date('2026-12-31'), 2)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ merchantName: 'Winners Chapel', total: 1200, transactionCount: 3 })
+    expect(result.map(r => r.merchantName)).not.toContain(null)
+  })
+
+  it('returns an empty array when nothing is uncategorised', async () => {
+    const prisma = makePrisma({ transaction: { groupBy: vi.fn().mockResolvedValue([]) } })
+    const svc = new TransactionAnalyticsService(prisma)
+    expect(await svc.getUncategorisedMerchants(USER_ID, new Date(), new Date())).toEqual([])
+  })
+})

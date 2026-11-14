@@ -2,6 +2,7 @@ import type {
   AccountBalance,
   AffordabilityProfile,
   CategorySpend,
+  MerchantSpend,
   MonthlyComparison,
   SafeToSpend,
   Subscription,
@@ -23,6 +24,7 @@ export function formatSpendingAnalysis(
   comparison: MonthlyComparison,
   categoryFilter: string | undefined,
   fromDate: Date,
+  otherMerchants: MerchantSpend[] = [],
 ): string {
   if (categories.length === 0) {
     const period = categoryFilter ?? 'any category'
@@ -37,7 +39,17 @@ export function formatSpendingAnalysis(
     : `Your spending breakdown for ${periodLabel}:\n`
 
   for (const c of categories.slice(0, 8)) {
-    out += `• ${capitalise(c.category)}: ${formatGBP(c.total)} (${c.transactionCount} transactions)\n`
+    // A bare "Other" line is useless — name the top merchants inside it so the
+    // user can see where the money actually went.
+    if (c.category === 'other' && otherMerchants.length > 0) {
+      const names = otherMerchants
+        .slice(0, 3)
+        .map((m) => `${capitalise(m.merchantName)} (${formatGBP(m.total)})`)
+        .join(', ')
+      out += `• Other: ${formatGBP(c.total)} — mostly ${names}\n`
+    } else {
+      out += `• ${capitalise(c.category)}: ${formatGBP(c.total)} (${c.transactionCount} transactions)\n`
+    }
   }
 
   if (!categoryFilter && categories.length > 1) {
