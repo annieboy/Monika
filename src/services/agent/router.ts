@@ -391,7 +391,13 @@ export async function routeIntent(
           ? analytics.getMonthlyComparison(userId, categoryFilter)
           : Promise.resolve({ thisMonth: 0, lastMonth: 0, changeAmount: 0, changePct: null }),
       ])
-      structuredText = formatSpendingAnalysis(categories, comparison, categoryFilter, fromDate)
+      // If a chunk of spend is uncategorised, name the merchants inside "Other"
+      // rather than leaving a dead "Other: £X" line.
+      const hasOther = categories.some((c) => c.category === 'other' && c.total > 0)
+      const otherMerchants = hasOther
+        ? await analytics.getUncategorisedMerchants(userId, fromDate, toDate)
+        : []
+      structuredText = formatSpendingAnalysis(categories, comparison, categoryFilter, fromDate, otherMerchants)
       break
     }
 

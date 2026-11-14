@@ -296,10 +296,15 @@ async function runTool(
       const { from, to, label } = resolveRange(input)
       const cats = await analytics.getSpendingByCategory(userId, from, to, input['category'] as string | undefined)
       const total = cats.reduce((s, c) => s + c.total, 0)
+      const hasOther = cats.some(c => c.category === 'other' && c.total > 0)
+      const otherMerchants = hasOther ? await analytics.getUncategorisedMerchants(userId, from, to) : []
       return JSON.stringify({
         period: label,
         total_spent: total,
         by_category: cats.map(c => ({ category: c.category, amount: c.total, transactions: c.transactionCount })),
+        ...(otherMerchants.length > 0
+          ? { other_top_merchants: otherMerchants.map(m => ({ merchant: m.merchantName, amount: m.total, transactions: m.transactionCount })) }
+          : {}),
       })
     }
     case 'search_transactions': {
@@ -460,6 +465,7 @@ Handling common requests:
 - "total incoming/outgoing (this financial year)", "account summary" (earned vs spent), "how much from salary" → get_cashflow_summary (default period this_financial_year). Report money in, money out, net, and salary separately.
 - "do I have a <mortgage/loan/savings/credit card/overdraft>?" is a factual lookup, NOT an affordability calc: call get_account_balances (its accounts include the type, e.g. a "mortgage" or "savings" account) AND search_transactions for the lender or the word (e.g. "mortgage", "Halifax"). Answer plainly — "yes, you've a mortgage account (…)", or "I can see regular payments to <lender> that look like a mortgage", or "I can't see one in the connected account(s) — it may be at a bank you haven't linked." Never run an affordability analysis for this.
 - "list/all payments to <merchant>" / "transactions today" → search_transactions, then LIST them (see style rule below).
+- When get_spending returns other_top_merchants and "other"/uncategorised is a big chunk, NAME those merchants (e.g. "mostly Winners Chapel £1,200 and ACME £800") instead of just saying "Other" — a bare "Other" figure is unhelpful.
 - "can I afford to spend £X?" / "how much can I safely spend this weekend?" / "will I make it to payday?" / "is it safe to spend?" → get_safe_to_spend (days: ~2 for a weekend, 7 for a week, up to ~30 for "until payday"). Lead with the safe amount; mention bills due and any warning. If they named an amount, say plainly whether it fits.
 - "how much did I get/receive from <named source>" where the source is NOT their salary (a tenant, a client, a person, DWP, a platform like PayStream) → get_income_from_payer. Use get_income only for overall monthly salary.
 - "how much have I given to charity?" / "my donations" / "how much gift aid?" → get_charitable_giving. Report total donated this tax year and the Gift Aid uplift; add the advice disclaimer.

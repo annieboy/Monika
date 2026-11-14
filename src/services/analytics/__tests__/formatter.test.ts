@@ -66,6 +66,29 @@ describe('formatSpendingAnalysis', () => {
     const out = formatSpendingAnalysis(CATEGORIES, { thisMonth: 325.50, lastMonth: 400, changeAmount: -74.50, changePct: -18.6 }, undefined, DATE)
     expect(out).toContain('less than last month')
   })
+
+  it('names the top merchants inside the "Other" bucket instead of a bare line', () => {
+    const cats = [
+      { category: 'other', total: 2470.10, transactionCount: 15 },
+      { category: 'groceries', total: 120.00, transactionCount: 4 },
+    ]
+    const otherMerchants = [
+      { merchantName: 'Winners Chapel', total: 1200.00, transactionCount: 3 },
+      { merchantName: 'Acme Ltd', total: 800.00, transactionCount: 5 },
+    ]
+    const out = formatSpendingAnalysis(cats, NO_COMPARISON, undefined, DATE, otherMerchants)
+    expect(out).toContain('Winners Chapel')
+    expect(out).toContain('£1200.00')
+    expect(out).toContain('Acme Ltd')
+    expect(out).toMatch(/Other:.*mostly/)
+  })
+
+  it('falls back to a plain Other line when no merchant detail is given', () => {
+    const cats = [{ category: 'other', total: 2470.10, transactionCount: 15 }]
+    const out = formatSpendingAnalysis(cats, NO_COMPARISON, undefined, DATE)
+    expect(out).toContain('Other')
+    expect(out).not.toContain('mostly')
+  })
 })
 
 // ── formatSubscriptions ───────────────────────────────────────────────────────

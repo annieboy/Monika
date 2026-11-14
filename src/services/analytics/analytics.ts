@@ -181,6 +181,45 @@ export class TransactionAnalyticsService {
   }
 
   /**
+   * Top merchants within the uncategorised ("other") bucket for a window.
+   * Lets us turn a useless "Other: £2,470" line into named merchants, which
+   * stays useful however good categorisation gets.
+   */
+  async getUncategorisedMerchants(
+    userId: string,
+    from: Date,
+    to: Date,
+    limit = 6,
+  ): Promise<MerchantSpend[]> {
+    const results = await this.prisma.transaction.groupBy({
+      by: ['merchantNameClean'],
+      where: {
+        userId,
+        transactionDate: { gte: from, lte: to },
+        amount: { lt: 0 },
+        isSalary: false, isInternalTransfer: false,
+        OR: [
+          { category: null },
+          { category: { in: ['other', 'general', 'uncategorised', 'uncategorized'] } },
+        ],
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+      orderBy: { _sum: { amount: 'asc' } },
+    })
+
+    return results
+      .filter((r): r is typeof r & { merchantNameClean: string } =>
+        typeof r.merchantNameClean === 'string' && r.merchantNameClean.trim().length > 0)
+      .map((r) => ({
+        merchantName: r.merchantNameClean,
+        total: Math.abs((r._sum.amount ?? new Decimal(0)).toNumber()),
+        transactionCount: r._count.id,
+      }))
+      .slice(0, limit)
+  }
+
+  /**
    * This-month vs last-month spending comparison, optionally for one category.
    */
   async getMonthlyComparison(
