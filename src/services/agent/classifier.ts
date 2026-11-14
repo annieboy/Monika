@@ -64,16 +64,31 @@ const RULES: Rule[] = [
     ],
   },
   {
+    // Questions ABOUT past money movement — "how much did I transfer/send/move/
+    // pay this month", "show my transfers". These are analytics, NOT commands to
+    // move money. MUST precede payment_request, which would otherwise grab
+    // "transfer"/"send" and wrongly reply "payments aren't available". Routed to
+    // the agent (via 'unknown'), which can search and total them.
+    intent: 'unknown',
+    patterns: [
+      /\bhow\s+much\b[^?]*\b(transfer(?:red)?|sent|send|mov(?:ed|e))\b/i,
+      /\bhow\s+much\b[^?]*\bpaid?\s+to\b/i,
+      /\b(show|list)\s+(me\s+)?(my\s+)?transfers?\b/i,
+      /\bmy\s+transfers?\b/i,
+      /\btotal\b[^?]*\btransfers?\b/i,
+    ],
+  },
+  {
     intent: 'payment_request',
     patterns: [
-      /\bpay\b.*\bto\b/i,
-      /\btransfer\b/i,
-      /\bsend\s+(money|funds|£|\$)/i,
-      /\bmake\s+a\s+payment/i,
-      /\bpay\s+(someone|a\s+bill|my\s+rent|my\s+mortgage)/i,
-      /\bset\s+up\s+(a\s+)?payment/i,
+      // IMPERATIVE money-movement only — an amount or an explicit "send money".
+      /\bpay\s+(someone|a\s+bill|my\s+rent|my\s+mortgage)\b/i,
+      /\bpay\s+(£|\$|€)?\d/i,
+      /\b(transfer|send)\s+(£|\$|€)?\s?\d/i,
+      /\b(transfer|send)\s+(money|funds|cash)\b/i,
+      /\bmake\s+a\s+(payment|transfer|bank\s+transfer)\b/i,
+      /\bset\s+up\s+(a\s+)?(payment|transfer|standing\s+order)\b/i,
       /\bbank\s+transfer\b/i,
-      /\bpay\s+£\d/i,
     ],
   },
   {
