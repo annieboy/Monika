@@ -240,6 +240,23 @@ export function isFollowUp(message: string): boolean {
   return false
 }
 
+/** A charity/donation/Gift-Aid question (not a bare "giving"). */
+function isCharityQuery(message: string): boolean {
+  return /\b(charit(y|ies|able)|donations?|donate[ds]?|gift\s*aid|tithe|charitable\s+giving)\b/i.test(message)
+}
+
+/**
+ * Does the message pin a specific short window (this/last week or month, today,
+ * yesterday, or an explicit date/range)? Used to decide whether charity should
+ * use its tax-year frame (no narrow window) or a specific period.
+ */
+function hasNarrowTimeframe(message: string): boolean {
+  return (
+    /\b(today|yesterday|this\s+(week|month)|last\s+(week|month)|past\s+(week|month)|this\s+weekend)\b/i.test(message) ||
+    extractExplicitDateRange(message) !== null
+  )
+}
+
 const STATIC_UNKNOWN =
   "I didn't quite understand that. You can ask me things like: \"How much did I spend on groceries?\", \"Can I afford a £400k mortgage?\", \"How much can I safely spend this weekend?\", or \"What's my balance?\""
 
@@ -333,6 +350,17 @@ export async function routeIntent(
     const followUp = await answerWithAgent(message, userId, prisma, anthropicApiKey, history)
     if (followUp) return followUp
     // fall through to normal handling if the agent is unavailable
+  }
+
+  // Charitable giving is conventionally framed by TAX YEAR (for Gift Aid), not
+  // "this month". Route charity/donation/gift-aid questions straight to the
+  // tax-year tracker — which also names donations — so the answer is consistent
+  // with follow-ups and includes the Gift Aid uplift. A question with its own
+  // short timeframe ("charity this month") still falls through to the normal
+  // category path for that period.
+  if (isCharityQuery(message) && !hasNarrowTimeframe(message)) {
+    const summary = await getCharitySummary(prisma, userId)
+    return formatCharitySummary(summary)
   }
 
   // "how much do I earn from <X>": sum the money coming IN from that payer,
