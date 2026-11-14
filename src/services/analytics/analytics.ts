@@ -404,6 +404,57 @@ export class TransactionAnalyticsService {
   }
 
   /**
+   * Spending matched by free text across merchant name AND description, so a
+   * payee with no clean merchant name (e.g. a church that only shows in the
+   * statement line) is still found. Multi-word queries match token-by-token in
+   * any order ("winners chapel" matches "WINNERS CHAPEL INTL"). Labels each
+   * transaction by the best available name, falling back to the description.
+   */
+  async searchSpendByText(
+    userId: string,
+    query: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; transactionCount: number; transactions: RecentTransaction[] }> {
+    const tokens = query.toLowerCase().split(/\s+/).map(t => t.trim()).filter(t => t.length >= 3)
+    const terms = tokens.length > 0 ? tokens : [query.trim()]
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        transactionDate: { gte: from, lte: to },
+        amount: { lt: 0 },
+        isInternalTransfer: false,
+        // Every token must appear somewhere in the searchable text.
+        AND: terms.map(tok => ({
+          OR: [
+            { merchantNameClean: { contains: tok, mode: 'insensitive' as const } },
+            { merchantName: { contains: tok, mode: 'insensitive' as const } },
+            { cleanDescription: { contains: tok, mode: 'insensitive' as const } },
+            { rawDescription: { contains: tok, mode: 'insensitive' as const } },
+          ],
+        })),
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: 30,
+      select: {
+        merchantName: true, merchantNameClean: true, cleanDescription: true,
+        rawDescription: true, amount: true, transactionDate: true, category: true,
+      },
+    })
+    const total = rows.reduce((s, r) => s + Math.abs(r.amount.toNumber()), 0)
+    return {
+      total,
+      transactionCount: rows.length,
+      transactions: rows.map(r => ({
+        date: r.transactionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        merchant: r.merchantNameClean ?? r.merchantName ?? r.cleanDescription ?? r.rawDescription ?? query,
+        amount: Math.abs(r.amount.toNumber()),
+        category: r.category,
+      })),
+    }
+  }
+
+  /**
    * Money coming IN from a specific payer (credits matching the name), e.g.
    * "how much do I earn from PayStream". Not limited to salary-flagged rows.
    */

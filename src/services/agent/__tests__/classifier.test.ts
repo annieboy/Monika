@@ -354,3 +354,27 @@ describe('classifyIntent — disconnect / log off', () => {
     expect((await classifyIntent('unlink my bank account', NO_KEY)).intent).toBe('account_management')
   })
 })
+
+describe('classifyIntent — money-movement questions are NOT payment requests', () => {
+  it('"How much did I transfer this month" → not payment_request', async () => {
+    expect((await classifyIntent('How much did I transfer this month', NO_KEY)).intent).not.toBe('payment_request')
+  })
+  it('"How much did I send this month?" → not payment_request', async () => {
+    expect((await classifyIntent('How much did I send this month?', NO_KEY)).intent).not.toBe('payment_request')
+  })
+  it('"how much do I pay to halifax?" → not payment_request', async () => {
+    expect((await classifyIntent('how much do I pay to halifax?', NO_KEY)).intent).not.toBe('payment_request')
+  })
+  it('"show my transfers" → not payment_request', async () => {
+    expect((await classifyIntent('show my transfers', NO_KEY)).intent).not.toBe('payment_request')
+  })
+  it('still spots a real imperative payment: "transfer £50 to Jane"', async () => {
+    expect((await classifyIntent('transfer £50 to Jane', NO_KEY)).intent).toBe('payment_request')
+  })
+  it('still spots a real imperative payment: "send money to Tom"', async () => {
+    expect((await classifyIntent('send money to Tom', NO_KEY)).intent).toBe('payment_request')
+  })
+  it('does not break "how much did I spend" (stays spending_analysis)', async () => {
+    expect((await classifyIntent('how much did I spend this month', NO_KEY)).intent).toBe('spending_analysis')
+  })
+})
