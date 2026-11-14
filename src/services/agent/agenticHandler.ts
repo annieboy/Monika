@@ -376,14 +376,18 @@ async function runTool(
     }
     case 'get_charitable_giving': {
       const c = await getCharitySummary(prisma, userId)
+      const named = c.donations.filter(d => d.merchant ?? d.description).length
       return JSON.stringify({
         tax_year: c.taxYear,
         total_donated: c.totalDonated,
         gift_aid_uplift: c.giftAidUplift,
         donation_count: c.donations.length,
+        // Fall back to the statement description when the merchant name is
+        // missing, so we can still tell the user what the payment looked like.
+        donations_with_a_name: named,
         donations: c.donations.map(d => ({
           date: d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-          merchant: d.merchant,
+          name: d.merchant ?? d.description ?? null,
           amount: Math.abs(d.amount),
         })),
       })
@@ -468,7 +472,7 @@ Handling common requests:
 - When get_spending returns other_top_merchants and "other"/uncategorised is a big chunk, NAME those merchants (e.g. "mostly Winners Chapel £1,200 and ACME £800") instead of just saying "Other" — a bare "Other" figure is unhelpful.
 - "can I afford to spend £X?" / "how much can I safely spend this weekend?" / "will I make it to payday?" / "is it safe to spend?" → get_safe_to_spend (days: ~2 for a weekend, 7 for a week, up to ~30 for "until payday"). Lead with the safe amount; mention bills due and any warning. If they named an amount, say plainly whether it fits.
 - "how much did I get/receive from <named source>" where the source is NOT their salary (a tenant, a client, a person, DWP, a platform like PayStream) → get_income_from_payer. Use get_income only for overall monthly salary.
-- "how much have I given to charity?" / "my donations" / "how much gift aid?" → get_charitable_giving. Report total donated this tax year and the Gift Aid uplift; add the advice disclaimer.
+- "how much have I given to charity?" / "my donations" / "which charities?" / "how much gift aid?" → get_charitable_giving. Report total donated this tax year and the Gift Aid uplift; add the advice disclaimer. To name charities, use each donation's "name" (it may be the statement description). If a donation has no name, DON'T say it's "null" or "missing in the system" — say plainly that the payment doesn't show a charity name (e.g. "a couple show only as card donations"), and still list them by date and amount.
 - "what's my net worth?" / "what am I worth?" / "assets vs debts" → get_net_worth. Call it an estimate based on connected accounts.
 
 Style:
@@ -480,6 +484,7 @@ Style:
 - If the data genuinely has nothing (e.g. no transactions in that window), say so plainly and suggest a nearby timeframe
 - You are read-only: never offer to move money or make payments
 - Don't suggest connecting a bank — it's already connected
+- NEVER expose how the data is stored. Don't say a value is "null", "empty in the system", "marked as null", or name internal fields. If you genuinely don't have something, say it in plain human terms and still give what you do know.
 
 REGULATORY (FCA): You provide information, not financial advice. If your answer touches savings, investments, mortgages, pensions, insurance or credit decisions, end with:
 "_ℹ️ Information only, not financial advice._"
