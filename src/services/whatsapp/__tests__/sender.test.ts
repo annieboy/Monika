@@ -152,3 +152,99 @@ describe('sendWhatsAppMessage', () => {
     })
   })
 })
+
+// ── Interactive messages ──────────────────────────────────────────────────────
+
+describe('sendInteractiveButtons', () => {
+  const BUTTONS = [
+    { id: 'shortcut_balance', title: 'My balance' },
+    { id: 'shortcut_help', title: 'What can you do?' },
+  ]
+
+  it('posts a button message in the shape Meta expects', async () => {
+    const fetchMock = mockFetch([{ ok: true, status: 200, body: makeSuccessResponse('wamid.btn') }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendInteractiveButtons } = await import('../sender.js')
+
+    const result = await sendInteractiveButtons(TO, 'Good morning 👋', BUTTONS, PHONE_NUMBER_ID, ACCESS_TOKEN)
+
+    expect(result.waMessageId).toBe('wamid.btn')
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }]
+    expect(JSON.parse(init.body)).toEqual({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: TO,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: 'Good morning 👋' },
+        action: {
+          buttons: [
+            { type: 'reply', reply: { id: 'shortcut_balance', title: 'My balance' } },
+            { type: 'reply', reply: { id: 'shortcut_help', title: 'What can you do?' } },
+          ],
+        },
+      },
+    })
+  })
+
+  it('trims a button label to WhatsApp\'s 20-character limit', async () => {
+    const fetchMock = mockFetch([{ ok: true, status: 200, body: makeSuccessResponse() }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendInteractiveButtons } = await import('../sender.js')
+
+    await sendInteractiveButtons(TO, 'Pick', [{ id: 'x', title: 'A label that is far too long' }], PHONE_NUMBER_ID, ACCESS_TOKEN)
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }]
+    const title = (JSON.parse(init.body) as { interactive: { action: { buttons: Array<{ reply: { title: string } }> } } })
+      .interactive.action.buttons[0]!.reply.title
+    expect(title).toHaveLength(20)
+  })
+
+  it('refuses, without calling Meta, what cannot be sent as buttons', async () => {
+    const fetchMock = mockFetch([{ ok: true, status: 200, body: makeSuccessResponse() }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendInteractiveButtons, SendError } = await import('../sender.js')
+    const four = [1, 2, 3, 4].map((n) => ({ id: `b${n}`, title: `Button ${n}` }))
+
+    await expect(sendInteractiveButtons(TO, 'Hi', [], PHONE_NUMBER_ID, ACCESS_TOKEN)).rejects.toBeInstanceOf(SendError)
+    await expect(sendInteractiveButtons(TO, 'Hi', four, PHONE_NUMBER_ID, ACCESS_TOKEN)).rejects.toBeInstanceOf(SendError)
+    await expect(sendInteractiveButtons(TO, 'x'.repeat(1025), BUTTONS, PHONE_NUMBER_ID, ACCESS_TOKEN)).rejects.toBeInstanceOf(SendError)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('throws SendError with the status on a 4xx (not retried)', async () => {
+    const fetchMock = mockFetch([{ ok: false, status: 400, body: 'bad request' }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendInteractiveButtons } = await import('../sender.js')
+
+    await expect(sendInteractiveButtons(TO, 'Hi', BUTTONS, PHONE_NUMBER_ID, ACCESS_TOKEN)).rejects.toMatchObject({
+      name: 'SendError',
+      statusCode: 400,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('sendCtaUrlMessage', () => {
+  it('posts a link-button message in the shape Meta expects', async () => {
+    const fetchMock = mockFetch([{ ok: true, status: 200, body: makeSuccessResponse('wamid.cta') }])
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendCtaUrlMessage } = await import('../sender.js')
+
+    const result = await sendCtaUrlMessage(
+      TO, 'Tap below to connect.', 'Connect my bank', 'https://example.com/banking/start?token=abc', PHONE_NUMBER_ID, ACCESS_TOKEN,
+    )
+
+    expect(result.waMessageId).toBe('wamid.cta')
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }]
+    expect((JSON.parse(init.body) as { interactive: unknown }).interactive).toEqual({
+      type: 'cta_url',
+      body: { text: 'Tap below to connect.' },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: 'Connect my bank', url: 'https://example.com/banking/start?token=abc' },
+      },
+    })
+  })
+})

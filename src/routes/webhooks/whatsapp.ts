@@ -18,7 +18,8 @@ import { config } from '../../config.js'
 import { verifyHmacSignature, hashPhoneNumber } from '../../lib/crypto.js'
 import { parseTextMessage, parseStatusUpdates } from '../../services/whatsapp/parser.js'
 import { processInboundMessage } from '../../services/whatsapp/webhook.js'
-import { sendWhatsAppMessage, SendError } from '../../services/whatsapp/sender.js'
+import { SendError } from '../../services/whatsapp/sender.js'
+import { buildOutbound, sendOutbound } from '../../services/whatsapp/outbound.js'
 import { processStatusUpdate } from '../../services/whatsapp/status.js'
 import { checkUserRateLimit } from '../../lib/userRateLimit.js'
 import { captureException } from '../../lib/monitoring.js'
@@ -189,7 +190,9 @@ const whatsappRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const accessToken = config.WHATSAPP_ACCESS_TOKEN
 
       if (phoneNumberId && accessToken) {
-        sendWhatsAppMessage(parsed.from, result.response, phoneNumberId, accessToken)
+        // Buttons / a link button where they help; plain text otherwise (and as
+        // the fallback if WhatsApp rejects the interactive form).
+        sendOutbound(parsed.from, buildOutbound(result.response, result.buttons), phoneNumberId, accessToken)
           .then(({ waMessageId: outboundWamid }) => {
             // Store outbound wamid on the assistant row so status callbacks resolve
             return prisma.conversation.update({

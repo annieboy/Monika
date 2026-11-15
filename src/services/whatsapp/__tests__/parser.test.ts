@@ -148,3 +148,42 @@ describe('parseStatusUpdates', () => {
     expect(results).toHaveLength(1)
   })
 })
+
+// ── Button taps ───────────────────────────────────────────────────────────────
+
+describe('parseTextMessage — button taps', () => {
+  function withMessage(message: Record<string, unknown>): WhatsAppWebhookPayload {
+    const payload = makeTextPayload()
+    payload.entry[0]!.changes[0]!.value.messages = [message as never]
+    return payload
+  }
+  const base = { id: 'wamid.tap1', from: '447700900001', timestamp: '1717776000' }
+
+  it('reads a reply-button tap as its label', () => {
+    const parsed = parseTextMessage(withMessage({
+      ...base,
+      type: 'interactive',
+      interactive: { type: 'button_reply', button_reply: { id: 'shortcut_balance', title: 'My balance' } },
+    }))
+    expect(parsed).toMatchObject({ waMessageId: 'wamid.tap1', from: '447700900001', text: 'My balance' })
+  })
+
+  it('reads a list-row tap as its label', () => {
+    const parsed = parseTextMessage(withMessage({
+      ...base,
+      type: 'interactive',
+      interactive: { type: 'list_reply', list_reply: { id: 'row_1', title: 'Spending this month' } },
+    }))
+    expect(parsed?.text).toBe('Spending this month')
+  })
+
+  it('reads a template quick-reply tap as its label', () => {
+    const parsed = parseTextMessage(withMessage({ ...base, type: 'button', button: { text: 'Continue Setup', payload: 'x' } }))
+    expect(parsed?.text).toBe('Continue Setup')
+  })
+
+  it('still ignores messages with no usable text', () => {
+    expect(parseTextMessage(withMessage({ ...base, type: 'image', image: { id: 'media-1' } }))).toBeNull()
+    expect(parseTextMessage(withMessage({ ...base, type: 'interactive', interactive: { type: 'nfm_reply' } }))).toBeNull()
+  })
+})

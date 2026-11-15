@@ -5,6 +5,9 @@ import {
   PROMPT_MARKETING,
   PROMPT_TERMS_DECLINED,
   TERMS_VERSION,
+  TERMS_BUTTONS,
+  MARKETING_BUTTONS,
+  COMPLETE_BUTTONS,
 } from '../onboardingFlow.js'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -177,5 +180,68 @@ describe('handleOnboardingStep', () => {
       const result = await handleOnboardingStep(prisma, USER_ID, 'what is my balance?')
       expect(result.handled).toBe(false)
     })
+  })
+})
+
+// ── Reply buttons ─────────────────────────────────────────────────────────────
+
+describe('handleOnboardingStep — reply buttons', () => {
+  const nameEnc = Buffer.from('Annie')
+  const termsAcceptedAt = new Date('2024-01-01')
+
+  it('offers I agree / No thanks with the terms prompt', async () => {
+    // Name already asked (1 prior onboarding row) → this message is the name
+    const result = await handleOnboardingStep(makePrisma(makeUser(), 1), USER_ID, 'Annie')
+    expect(result.buttons).toEqual(TERMS_BUTTONS)
+  })
+
+  it('offers Yes please / No thanks with the marketing prompt', async () => {
+    const result = await handleOnboardingStep(makePrisma(makeUser({ fullNameEnc: nameEnc })), USER_ID, 'yes')
+    expect(result.response).toBe(PROMPT_MARKETING)
+    expect(result.buttons).toEqual(MARKETING_BUTTONS)
+  })
+
+  it('offers next steps when onboarding completes', async () => {
+    const result = await handleOnboardingStep(makePrisma(makeUser({ fullNameEnc: nameEnc, termsAcceptedAt })), USER_ID, 'no')
+    expect(result.buttons).toEqual(COMPLETE_BUTTONS)
+  })
+
+  it('has no buttons on the free-text name question', async () => {
+    const result = await handleOnboardingStep(makePrisma(makeUser(), 0), USER_ID, 'hi')
+    expect(result.response).toBe(PROMPT_NAME)
+    expect(result).not.toHaveProperty('buttons')
+  })
+
+  // A tap arrives as the button's label, so each label must be understood.
+  it('accepts the terms when "I agree" is tapped', async () => {
+    const prisma = makePrisma(makeUser({ fullNameEnc: nameEnc }))
+    const result = await handleOnboardingStep(prisma, USER_ID, TERMS_BUTTONS[0]!.title)
+    expect(result.response).toBe(PROMPT_MARKETING)
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ termsVersion: TERMS_VERSION }) }),
+    )
+  })
+
+  it('declines the terms when "No thanks" is tapped', async () => {
+    const prisma = makePrisma(makeUser({ fullNameEnc: nameEnc }))
+    const result = await handleOnboardingStep(prisma, USER_ID, TERMS_BUTTONS[1]!.title)
+    expect(result.response).toBe(PROMPT_TERMS_DECLINED)
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('records marketing consent from the tapped label', async () => {
+    for (const [label, consent] of [[MARKETING_BUTTONS[0]!.title, true], [MARKETING_BUTTONS[1]!.title, false]] as const) {
+      const prisma = makePrisma(makeUser({ fullNameEnc: nameEnc, termsAcceptedAt }))
+      await handleOnboardingStep(prisma, USER_ID, label)
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ marketingConsent: consent }) }),
+      )
+    }
+  })
+
+  it('keeps every label within WhatsApp\'s 20-character limit', () => {
+    for (const b of [...TERMS_BUTTONS, ...MARKETING_BUTTONS, ...COMPLETE_BUTTONS]) {
+      expect(b.title.length, b.title).toBeLessThanOrEqual(20)
+    }
   })
 })
