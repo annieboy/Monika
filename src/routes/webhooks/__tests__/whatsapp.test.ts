@@ -15,7 +15,20 @@ function sign(body: string, secret: string): string {
   return 'sha256=' + createHmac('sha256', secret).update(Buffer.from(body)).digest('hex')
 }
 
-function makePayload(overrides: Record<string, unknown> = {}): string {
+const DEFAULT_MESSAGE = {
+  id: 'wamid.test123',
+  from: '447700900001',
+  timestamp: '1717776000',
+  type: 'text',
+  // A plain question (not a greeting) so these tests exercise the ordinary
+  // text-reply path; greetings and button taps have their own tests below.
+  text: { body: 'What can you do?' },
+}
+
+function makePayload(
+  overrides: Record<string, unknown> = {},
+  message: Record<string, unknown> = DEFAULT_MESSAGE,
+): string {
   const base = {
     object: 'whatsapp_business_account',
     entry: [
@@ -27,15 +40,7 @@ function makePayload(overrides: Record<string, unknown> = {}): string {
             value: {
               messaging_product: 'whatsapp',
               metadata: { display_phone_number: '447700900000', phone_number_id: 'waba-123' },
-              messages: [
-                {
-                  id: 'wamid.test123',
-                  from: '447700900001',
-                  timestamp: '1717776000',
-                  type: 'text',
-                  text: { body: 'Hello Monika' },
-                },
-              ],
+              messages: [message],
             },
           },
         ],
@@ -84,6 +89,8 @@ function makeMockPrisma(): PrismaClient {
         createdAt: now,
         updatedAt: now,
       }),
+      // Name lookup for the greeting (no stored name → greeted without one)
+      findUnique: vi.fn().mockResolvedValue({ fullNameEnc: null }),
       // Simulate a fully-onboarded user so onboardingFlow short-circuits
       findUniqueOrThrow: vi.fn().mockResolvedValue({
         fullNameEnc: Buffer.from('Test'),
@@ -133,16 +140,11 @@ vi.mock('../../../services/conversation/opportunityConversationHandler.js', () =
 }))
 
 // Mock the sender so tests don't hit the real Meta API
-vi.mock('../../../services/whatsapp/sender.js', () => ({
+vi.mock('../../../services/whatsapp/sender.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../services/whatsapp/sender.js')>()),
   sendWhatsAppMessage: vi.fn().mockResolvedValue({ waMessageId: 'wamid.outbound' }),
-  SendError: class SendError extends Error {
-    statusCode: number | undefined
-    constructor(message: string, statusCode?: number) {
-      super(message)
-      this.name = 'SendError'
-      this.statusCode = statusCode
-    }
-  },
+  sendInteractiveButtons: vi.fn().mockResolvedValue({ waMessageId: 'wamid.outbound-buttons' }),
+  sendCtaUrlMessage: vi.fn().mockResolvedValue({ waMessageId: 'wamid.outbound-cta' }),
 }))
 
 afterEach(() => {
@@ -416,6 +418,78 @@ describe('POST /webhooks/whatsapp — outbound reply', () => {
     })
 
     expect(res.statusCode).toBe(200)
+  })
+})
+
+// ── POST /webhooks/whatsapp — buttons ──────────────────────────────────────
+
+describe('POST /webhooks/whatsapp — reply buttons', () => {
+  let prisma: PrismaClient
+  let app: FastifyInstance
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    prisma = makeMockPrisma()
+    app = await buildTestApp(prisma)
+  })
+
+  async function post(message: Record<string, unknown>): Promise<number> {
+    const body = makePayload({}, message)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body, APP_SECRET) },
+      body,
+    })
+    // Allow the fire-and-forget send to settle
+    await new Promise((r) => setTimeout(r, 10))
+    return res.statusCode
+  }
+
+  const greeting = { ...DEFAULT_MESSAGE, text: { body: 'Hello Monika' } }
+
+  it('answers a greeting with tappable shortcut buttons', async () => {
+    const sender = await import('../../../services/whatsapp/sender.js')
+
+    expect(await post(greeting)).toBe(200)
+
+    expect(sender.sendInteractiveButtons).toHaveBeenCalledTimes(1)
+    const [to, text, buttons] = vi.mocked(sender.sendInteractiveButtons).mock.calls[0]!
+    expect(to).toBe('447700900001')
+    expect(text).toMatch(/Good (morning|afternoon|evening)/)
+    expect(buttons.map((b) => b.title)).toEqual(['Connect my bank', 'What can you do?'])
+    expect(sender.sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+
+  it('falls back to plain text when WhatsApp rejects the buttons', async () => {
+    const sender = await import('../../../services/whatsapp/sender.js')
+    vi.mocked(sender.sendInteractiveButtons).mockRejectedValueOnce(
+      new sender.SendError('Meta API rejected interactive message (400)', 400),
+    )
+
+    expect(await post(greeting)).toBe(200)
+
+    expect(sender.sendWhatsAppMessage).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(sender.sendWhatsAppMessage).mock.calls[0]![1]).toMatch(/Good (morning|afternoon|evening)/)
+  })
+
+  it('treats a tapped button like the typed question', async () => {
+    const sender = await import('../../../services/whatsapp/sender.js')
+
+    const status = await post({
+      id: 'wamid.tap1',
+      from: '447700900001',
+      timestamp: '1717776000',
+      type: 'interactive',
+      interactive: { type: 'button_reply', button_reply: { id: 'shortcut_help', title: 'What can you do?' } },
+    })
+
+    expect(status).toBe(200)
+    // Stored as the user's message, and answered
+    expect(prisma.conversation.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: 'user', content: 'What can you do?' }) }),
+    )
+    expect(sender.sendWhatsAppMessage).toHaveBeenCalledTimes(1)
   })
 })
 

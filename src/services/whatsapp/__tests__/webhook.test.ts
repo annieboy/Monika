@@ -44,6 +44,10 @@ vi.mock('../../onboarding/onboardingFlow.js', () => ({
   handleOnboardingStep: vi.fn().mockResolvedValue({ handled: false, response: '' }),
 }))
 
+vi.mock('../../conversation/smallTalk.js', () => ({
+  handleSmallTalk: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock('../../conversation/sessionService.js', () => ({
   getOrCreateSession: vi.fn().mockResolvedValue('session-abc'),
   loadSessionHistory: vi.fn().mockResolvedValue([]),
@@ -64,6 +68,8 @@ vi.mock('../../../config.js', () => ({
 import { processInboundMessage } from '../webhook.js'
 import { trackEvent } from '../../analytics/events.js'
 import { handleOpportunityReply } from '../../conversation/opportunityConversationHandler.js'
+import { handleOnboardingStep } from '../../onboarding/onboardingFlow.js'
+import { handleSmallTalk } from '../../conversation/smallTalk.js'
 import { classifyIntent } from '../../agent/classifier.js'
 
 const WABA_ID = 'waba-001'
@@ -146,6 +152,30 @@ describe('processInboundMessage', () => {
     await processInboundMessage(prisma, MSG_ID, PHONE, 'hello', WABA_ID)
     const signupCalls = vi.mocked(trackEvent).mock.calls.filter(([, evt]) => evt === 'signup')
     expect(signupCalls).toHaveLength(0)
+  })
+
+  it('answers a greeting without classifying it, and passes its buttons through', async () => {
+    const buttons = [{ id: 'shortcut_balance', title: 'My balance' }]
+    vi.mocked(handleSmallTalk).mockResolvedValueOnce({ intent: 'greeting', response: 'Good morning, Arnex 👋', buttons })
+    const prisma = makePrisma()
+    const result = await processInboundMessage(prisma, MSG_ID, PHONE, 'hi', WABA_ID)
+    expect(result?.intent).toBe('greeting')
+    expect(result?.response).toBe('Good morning, Arnex 👋')
+    expect(result?.buttons).toEqual(buttons)
+    expect(classifyIntent).not.toHaveBeenCalled()
+  })
+
+  it('passes onboarding step buttons through', async () => {
+    const buttons = [{ id: 'terms_yes', title: 'I agree' }, { id: 'terms_no', title: 'No thanks' }]
+    vi.mocked(handleOnboardingStep).mockResolvedValueOnce({ handled: true, response: 'Terms?', buttons })
+    const result = await processInboundMessage(makePrisma(), MSG_ID, PHONE, 'Arnex', WABA_ID)
+    expect(result?.intent).toBe('onboarding')
+    expect(result?.buttons).toEqual(buttons)
+  })
+
+  it('leaves buttons off an ordinary routed reply', async () => {
+    const result = await processInboundMessage(makePrisma(), MSG_ID, PHONE, 'what is my balance?', WABA_ID)
+    expect(result).not.toHaveProperty('buttons')
   })
 
   it('short-circuits with opportunity_reply intent when opportunityHandler handles the message', async () => {

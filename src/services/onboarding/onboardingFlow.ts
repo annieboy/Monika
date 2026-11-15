@@ -17,6 +17,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { encrypt, decrypt } from '../../lib/crypto.js'
 import { config } from '../../config.js'
+import type { ReplyButton } from '../whatsapp/sender.js'
 
 export const TERMS_VERSION = '1.0'
 
@@ -35,12 +36,12 @@ export const PROMPT_TERMS = (name: string): string =>
   `Before we dive in, I need you to agree to our Terms of Service and Privacy Policy:\n\n` +
   `📄 Terms: ${TERMS_URL}\n` +
   `🔒 Privacy: ${PRIVACY_URL}\n\n` +
-  `Reply *YES* to accept, or *NO* to cancel.`
+  `Tap *I agree* below to accept — or reply *YES* / *NO*.`
 
 export const PROMPT_MARKETING =
   `Great, you're all set legally ✅\n\n` +
   `Would you like to receive personalised money-saving tips and offers via WhatsApp?\n\n` +
-  `Reply *YES* or *NO* — you can change this anytime.`
+  `Tap a button below, or reply *YES* / *NO* — you can change this anytime.`
 
 export const PROMPT_COMPLETE = (name: string): string =>
   `Welcome aboard, ${name}! 🚀\n\n` +
@@ -55,21 +56,42 @@ export const PROMPT_TERMS_DECLINED =
   `No problem. If you change your mind, just message us again.\n\n` +
   `We'll need your agreement to our Terms to use Monika.`
 
+// ── Reply buttons ─────────────────────────────────────────────────────────────
+// A tap arrives as the button's label, so every label must read as a clear
+// yes/no to isYes/isNo below. Max 20 characters each.
+
+export const TERMS_BUTTONS: ReplyButton[] = [
+  { id: 'terms_yes', title: 'I agree' },
+  { id: 'terms_no', title: 'No thanks' },
+]
+
+export const MARKETING_BUTTONS: ReplyButton[] = [
+  { id: 'marketing_yes', title: 'Yes please' },
+  { id: 'marketing_no', title: 'No thanks' },
+]
+
+export const COMPLETE_BUTTONS: ReplyButton[] = [
+  { id: 'shortcut_connect', title: 'Connect my bank' },
+  { id: 'shortcut_help', title: 'What can you do?' },
+]
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface OnboardingResult {
   handled: boolean
   response: string
+  /** Suggested tappable replies for this step, when it has a fixed set of answers. */
+  buttons?: ReplyButton[]
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function isYes(text: string): boolean {
-  return /^\s*y(es|ep|eah|)?\s*$/i.test(text.trim())
+  return /^\s*(?:y|yes|yep|yeah|yup|ok|okay|sure|accept|agree|i\s+agree|yes,?\s+i\s+agree|yes\s+please)\s*[.!]*\s*$/i.test(text)
 }
 
 function isNo(text: string): boolean {
-  return /^\s*n(o|ope|ah|)?\s*$/i.test(text.trim())
+  return /^\s*(?:n|no|nope|nah|no\s+thanks|no\s+thank\s+you|not\s+now|decline)\s*[.!]*\s*$/i.test(text)
 }
 
 function decryptName(encBytes: Uint8Array | Buffer | null, encKey: string): string | null {
@@ -124,7 +146,7 @@ export async function handleOnboardingStep(
       data: { fullNameEnc: nameEnc },
     })
 
-    return { handled: true, response: PROMPT_TERMS(name) }
+    return { handled: true, response: PROMPT_TERMS(name), buttons: TERMS_BUTTONS }
   }
 
   // ── Step 2: Terms acceptance ─────────────────────────────────────────────
@@ -136,7 +158,7 @@ export async function handleOnboardingStep(
     if (!isYes(text)) {
       // Re-prompt — user hasn't given a clear answer yet
       const name = decryptName(user.fullNameEnc as Buffer | null, config.ENCRYPTION_KEY) ?? 'there'
-      return { handled: true, response: PROMPT_TERMS(name) }
+      return { handled: true, response: PROMPT_TERMS(name), buttons: TERMS_BUTTONS }
     }
 
     await prisma.user.update({
@@ -147,13 +169,13 @@ export async function handleOnboardingStep(
       },
     })
 
-    return { handled: true, response: PROMPT_MARKETING }
+    return { handled: true, response: PROMPT_MARKETING, buttons: MARKETING_BUTTONS }
   }
 
   // ── Step 3: Marketing / GDPR consent ────────────────────────────────────
   if (!user.gdprConsentAt) {
     if (!isYes(text) && !isNo(text)) {
-      return { handled: true, response: PROMPT_MARKETING }
+      return { handled: true, response: PROMPT_MARKETING, buttons: MARKETING_BUTTONS }
     }
 
     const marketingConsent = isYes(text)
@@ -166,7 +188,7 @@ export async function handleOnboardingStep(
     })
 
     const name = decryptName(user.fullNameEnc as Buffer | null, config.ENCRYPTION_KEY) ?? 'there'
-    return { handled: true, response: PROMPT_COMPLETE(name) }
+    return { handled: true, response: PROMPT_COMPLETE(name), buttons: COMPLETE_BUTTONS }
   }
 
   // Onboarding complete — let normal routing handle this message

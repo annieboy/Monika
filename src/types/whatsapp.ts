@@ -17,6 +17,26 @@ export interface WhatsAppNonTextMessage {
   type: Exclude<string, 'text'>
 }
 
+/** A tap on a reply button / list row of an interactive message we sent. */
+export interface WhatsAppInteractiveMessage {
+  id: string
+  from: string
+  timestamp: string
+  type: 'interactive'
+  interactive:
+    | { type: 'button_reply'; button_reply: { id: string; title: string } }
+    | { type: 'list_reply'; list_reply: { id: string; title: string; description?: string } }
+}
+
+/** A tap on a quick-reply button of a template message. */
+export interface WhatsAppTemplateButtonMessage {
+  id: string
+  from: string
+  timestamp: string
+  type: 'button'
+  button: { text: string; payload?: string }
+}
+
 export type WhatsAppMessage = WhatsAppTextMessage | WhatsAppNonTextMessage
 
 export interface WhatsAppWebhookValue {

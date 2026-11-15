@@ -5,11 +5,13 @@ import { routeIntent } from '../agent/router.js'
 import { trackEvent, hasAskedBefore } from '../analytics/events.js'
 import { handleOpportunityReply } from '../conversation/opportunityConversationHandler.js'
 import { handleOnboardingStep } from '../onboarding/onboardingFlow.js'
+import { handleSmallTalk } from '../conversation/smallTalk.js'
 import { getOrCreateSession, loadSessionHistory } from '../conversation/sessionService.js'
 import { CONSENT_PROMPT } from '../opportunity/opportunityMessageBuilder.js'
 import { config } from '../../config.js'
 import { logger } from '../../logger.js'
 import { isAllowedNumber } from './allowlist.js'
+import type { ReplyButton } from './sender.js'
 
 // Intents that count as a real "data question" (not onboarding/unknown)
 const DATA_INTENTS = new Set([
@@ -28,6 +30,8 @@ export interface ProcessedMessage {
   intent: string
   response: string
   sessionId: string
+  /** Suggested tappable replies to send with the response, if any. */
+  buttons?: ReplyButton[]
 }
 
 /**
@@ -125,6 +129,7 @@ export async function processInboundMessage(
       intent: 'onboarding',
       response: onboardingResult.response,
       sessionId,
+      ...(onboardingResult.buttons ? { buttons: onboardingResult.buttons } : {}),
     }
   }
 
@@ -150,6 +155,32 @@ export async function processInboundMessage(
       intent: 'opportunity_reply',
       response: opportunityResult.response,
       sessionId,
+    }
+  }
+
+  // A bare greeting or thank-you isn't a money question — answer it warmly, by
+  // name, with shortcut buttons, instead of classifying it.
+  const smallTalk = await handleSmallTalk(prisma, user.id, text)
+  if (smallTalk) {
+    const assistantConversation = await prisma.conversation.create({
+      data: {
+        userId: user.id,
+        sessionId,
+        role: 'assistant',
+        content: smallTalk.response,
+        modelUsed: 'small_talk',
+      },
+      select: { id: true },
+    })
+    return {
+      userId: user.id,
+      conversationId: userConversation.id,
+      responseConversationId: assistantConversation.id,
+      isNewUser,
+      intent: smallTalk.intent,
+      response: smallTalk.response,
+      sessionId,
+      ...(smallTalk.buttons ? { buttons: smallTalk.buttons } : {}),
     }
   }
 

@@ -31,6 +31,10 @@ vi.mock('../../onboarding/onboardingFlow.js', () => ({
   handleOnboardingStep: vi.fn().mockResolvedValue({ handled: false, response: '' }),
 }))
 
+vi.mock('../../conversation/smallTalk.js', () => ({
+  handleSmallTalk: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock('../../conversation/sessionService.js', () => ({
   getOrCreateSession: vi.fn().mockResolvedValue('session-uuid'),
   loadSessionHistory: vi.fn().mockResolvedValue([]),

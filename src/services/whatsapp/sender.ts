@@ -205,3 +205,149 @@ export async function sendTemplateMessage(
 
   throw lastError ?? new SendError('All template send attempts exhausted')
 }
+
+// ── Interactive messages (reply buttons, link button) ─────────────────────────
+// These are free-form messages: allowed inside the 24-hour customer-care window
+// with no template approval, and they work on the Meta test number.
+
+export interface ReplyButton {
+  /** Opaque id echoed back by Meta when the button is tapped. */
+  id: string
+  /** Label shown on the button — WhatsApp allows at most 20 characters. */
+  title: string
+}
+
+export const MAX_REPLY_BUTTONS = 3
+export const MAX_BUTTON_TITLE_LENGTH = 20
+export const MAX_INTERACTIVE_BODY_LENGTH = 1024
+
+async function postInteractive(
+  to: string,
+  interactive: Record<string, unknown>,
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<SendResult> {
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'interactive',
+    interactive,
+  })
+
+  let lastError: SendError | undefined
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const delayMs = RETRY_DELAYS_MS[attempt] ?? 2_000
+    if (delayMs > 0) await sleep(delayMs)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body,
+      })
+    } catch (err) {
+      lastError = new SendError(
+        `Network error on attempt ${attempt + 1}: ${err instanceof Error ? err.message : String(err)}`,
+        undefined,
+        attempt + 1,
+      )
+      continue
+    }
+
+    if (response.ok) {
+      const data = (await response.json()) as MetaSendResponse
+      const wamid = data.messages[0]?.id
+      if (!wamid) throw new SendError('Meta API returned success but no message ID in response')
+      return { waMessageId: wamid }
+    }
+
+    const safeError = (await response.text()).slice(0, 200)
+
+    if (response.status >= 400 && response.status < 500) {
+      throw new SendError(`Meta API rejected interactive message (${response.status})`, response.status, attempt + 1)
+    }
+
+    lastError = new SendError(
+      `Meta API server error on attempt ${attempt + 1} (${response.status}): ${safeError}`,
+      response.status,
+      attempt + 1,
+    )
+  }
+
+  throw lastError ?? new SendError('All interactive send attempts exhausted')
+}
+
+/**
+ * Sends a message with up to three tappable reply buttons. Tapping one comes
+ * back through the webhook as an `interactive` message carrying the button's
+ * id and title.
+ *
+ * Throws SendError without calling Meta when the message can't be expressed as
+ * buttons (no buttons, too many, or a body over WhatsApp's 1024-char limit) —
+ * callers should fall back to plain text.
+ */
+export async function sendInteractiveButtons(
+  to: string,
+  text: string,
+  buttons: ReplyButton[],
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<SendResult> {
+  if (buttons.length === 0 || buttons.length > MAX_REPLY_BUTTONS) {
+    throw new SendError(`Reply buttons must number 1–${MAX_REPLY_BUTTONS} (got ${buttons.length})`)
+  }
+  if (text.length > MAX_INTERACTIVE_BODY_LENGTH) {
+    throw new SendError(`Interactive body exceeds ${MAX_INTERACTIVE_BODY_LENGTH} characters`)
+  }
+
+  return postInteractive(
+    to,
+    {
+      type: 'button',
+      body: { text },
+      action: {
+        buttons: buttons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title.slice(0, MAX_BUTTON_TITLE_LENGTH) },
+        })),
+      },
+    },
+    phoneNumberId,
+    accessToken,
+  )
+}
+
+/**
+ * Sends a message with a single button that opens a URL (e.g. "Connect my
+ * bank"), instead of pasting a long raw link into the chat.
+ */
+export async function sendCtaUrlMessage(
+  to: string,
+  text: string,
+  buttonLabel: string,
+  linkUrl: string,
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<SendResult> {
+  if (text.length > MAX_INTERACTIVE_BODY_LENGTH) {
+    throw new SendError(`Interactive body exceeds ${MAX_INTERACTIVE_BODY_LENGTH} characters`)
+  }
+
+  return postInteractive(
+    to,
+    {
+      type: 'cta_url',
+      body: { text },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: buttonLabel.slice(0, MAX_BUTTON_TITLE_LENGTH), url: linkUrl },
+      },
+    },
+    phoneNumberId,
+    accessToken,
+  )
+}
